@@ -24,8 +24,8 @@ class WorkoutDemo(QWidget):
         "push ups": "Push ups.gif",
         "crunches": "Crunches.gif",
         "jumping jacks": "Jumping jacks.gif",
-        "cobra stretch": "Cobra Stretch.gif",
-        "plank": "Plank.gif"
+        "cobra stretch": "Cobra Stretch.png",
+        "plank": "plank.png"
     }
 
     def __init__(self, parent=None):
@@ -234,12 +234,14 @@ class WorkoutDemo(QWidget):
 
         if self.movie:
             self.movie.stop()
+            self.movie = None
 
         self.movie = QMovie(gif_path)
         self.movie.setCacheMode(QMovie.CacheMode.CacheAll)
         self.movie.setScaledSize(self.gif_label.size())
         self.gif_label.setMovie(self.movie)
         self.movie.start()
+
 
     # ==================================================
     def start_workout(self):
@@ -368,3 +370,10 @@ class WorkoutDemo(QWidget):
         main_win = self.window()
         if hasattr(main_win, "back_to_dashboard_from_demo"):
             main_win.back_to_dashboard_from_demo()
+
+    def closeEvent(self, event):
+        """Ensure GIF playback is stopped before widget is destroyed"""
+        if self.movie:
+            self.movie.stop()
+            self.movie = None
+        event.accept()
