@@ -25,7 +25,7 @@ class WorkoutDemo(QWidget):
         "crunches": "Crunches.gif",
         "jumping jacks": "Jumping jacks.gif",
         "cobra stretch": "Cobra Stretch.png",
-        "plank": "plank.png"
+        "plank": "Plank.png"
     }
 
     def __init__(self, parent=None):
