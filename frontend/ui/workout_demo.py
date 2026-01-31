@@ -360,7 +360,7 @@ class WorkoutDemo(QWidget):
         
         
 
-    # ==================================================
+    # ==========================================
     def go_back(self):
         if self.movie:
             self.movie.stop()
