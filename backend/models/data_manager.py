@@ -143,15 +143,16 @@ def get_trainee_info(trainee_id):
 
     try:
         cursor = connection.cursor()
-        # Add 'fitness_level' to the query here
         cursor.execute("""
             SELECT trainee_id, name, plan_id, fitness_level
-            FROM trainee WHERE trainee_id = ?
+            FROM trainee
+            WHERE trainee_id = ?
         """, (trainee_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
     finally:
         close_connection(connection, cursor)
+
 
 
 """
@@ -186,57 +187,22 @@ def get_workout_plan(plan_id):
 
     try:
         cursor = connection.cursor()
-
-        # Fetch plan data
         cursor.execute("SELECT * FROM workout_plan WHERE plan_id = ?", (plan_id,))
-        plan = cursor.fetchone()
-        if not plan:
+        row = cursor.fetchone()
+        if not row:
             return []
 
-        # Fetch workouts
-        cursor.execute("""
-            SELECT workout_id, workout_name, video_url
-            FROM workout
-            ORDER BY workout_id
-        """)
-        workouts = cursor.fetchall()
-
-        workout_plan = []
-
-        for w in workouts:
-            workout = dict(w)
-
-            wid = workout["workout_id"]
-
-            # 🔑 ID-based mapping (SAFE)
-            if wid == 1:      # Jumping Jacks
-                target = plan["jumpingjack_count"]
-            elif wid == 2:    # Push Ups
-                target = plan["pushup_count"]
-            elif wid == 3:    # Plank
-                target = plan["plank_time"]
-            elif wid == 4:    # Crunches
-                target = plan["crunches_count"]
-            elif wid == 5:    # Squats
-                target = plan["squat_count"]
-            elif wid == 6:    # Cobra Stretch
-                target = plan["cobra_stretch_time"]
-            else:
-                target = 0
-
-            workout_plan.append({
-                "workout_id": wid,
-                "name": workout["workout_name"],
-                "video_path": workout["video_url"],
-                "target_reps": target
-            })
-
-        return workout_plan
+        return [
+            {"workout_id": 1, "name": "Jumping Jacks", "target": row["jumpingjack_count"]},
+            {"workout_id": 2, "name": "Push Ups", "target": row["pushup_count"]},
+            {"workout_id": 3, "name": "Plank", "target": row["plank_time"]},
+            {"workout_id": 4, "name": "Crunches", "target": row["crunches_count"]},
+            {"workout_id": 5, "name": "Squats", "target": row["squat_count"]},
+            {"workout_id": 6, "name": "Cobra Stretch", "target": row["cobra_stretch_time"]}
+        ]
 
     finally:
         close_connection(connection, cursor)
-
-
 
 
 # =====================================================

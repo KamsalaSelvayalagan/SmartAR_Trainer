@@ -96,8 +96,9 @@ class WorkoutCard(QFrame):
         layout.addWidget(video_container)
 
         # Reps/Time
+        # Reps / Time (from workout_plan table)
         unit = "seconds" if self.workout["name"] in ["Plank", "Cobra Stretch"] else "reps"
-        target_val = self.workout.get("target_reps", 0)
+        target_val = self.workout.get("target", 0)
         target = QLabel(f"{target_val} {unit}")
         target.setFont(QFont("Segoe UI", 15, QFont.Weight.DemiBold))
         target.setStyleSheet("color: #667eea; background: transparent;")
