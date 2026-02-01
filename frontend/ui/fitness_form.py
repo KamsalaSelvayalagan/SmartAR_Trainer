@@ -261,7 +261,7 @@ class FitnessForm(QWidget):
         card_layout.addWidget(create_row("Weight", self.weight_input))
 
         # ================= Workout Experience =================
-        exp_label = QLabel("Workout Experience?")
+        exp_label = QLabel("Do you have previous workout experience?")
         exp_label.setStyleSheet(label_style)
         exp_label.setMinimumWidth(200)
 
@@ -293,8 +293,8 @@ class FitnessForm(QWidget):
         self.freq_input.setRange(1, 7)
         self.freq_input.setSuffix(" days")
 
-        exp_details_layout.addWidget(create_row("Workout duration", self.duration_input))
-        exp_details_layout.addWidget(create_row("Workout frequency", self.freq_input))
+        exp_details_layout.addWidget(create_row("Workout duration per day?", self.duration_input))
+        exp_details_layout.addWidget(create_row("Workout days per week?", self.freq_input))
 
         self.exp_details_widget.setVisible(False)
         self.workout_yes_radio.toggled.connect(
