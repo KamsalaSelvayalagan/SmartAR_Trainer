@@ -4,14 +4,13 @@ Connected to SQLite database using workout_session for unlocks
 Professional UI with glassmorphism effects and high-quality layout
 """
 
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QGridLayout, QScrollArea, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QSize
-from PyQt6.QtGui import QFont, QColor, QPalette
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QPixmap, QMovie
 
 from backend.models.data_manager import (
     get_trainee_info,
@@ -20,22 +19,22 @@ from backend.models.data_manager import (
     WORKOUT_COLUMNS
 )
 
+
 class WorkoutCard(QFrame):
-    """Premium individual workout card with video preview and progression state"""
+    """Premium individual workout card with video/image preview and progression state"""
 
     def __init__(self, workout, index, trainee_id, is_locked, parent=None):
         super().__init__(parent)
         self.workout = workout
         self.index = index
-        self.first_time = True
         self.trainee_id = trainee_id
         self.is_locked = is_locked
         self.init_ui()
 
     def init_ui(self):
         self.setObjectName("workoutCard")
-        
-        # Smooth scaling and hover effect in stylesheet
+        self.setProperty("unlocked", "true" if not self.is_locked else "false")
+
         self.setStyleSheet("""
             QFrame#workoutCard {
                 background: rgba(255, 255, 255, 0.07);
@@ -47,7 +46,6 @@ class WorkoutCard(QFrame):
                 border: 1px solid rgba(102, 126, 234, 0.6);
             }
         """)
-        self.setProperty("unlocked", "true" if not self.is_locked else "false")
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -74,29 +72,56 @@ class WorkoutCard(QFrame):
         video_layout = QVBoxLayout(video_container)
         video_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Placeholder for video or No Preview text
-        if self.workout.get("video_path") and self.workout["video_path"] != "":
-            self.video_widget = QVideoWidget()
-            video_layout.addWidget(self.video_widget)
-            
-            self.player = QMediaPlayer()
-            self.audio = QAudioOutput()
-            self.audio.setVolume(0)
-            self.player.setAudioOutput(self.audio)
-            self.player.setVideoOutput(self.video_widget)
-            self.player.setSource(QUrl.fromLocalFile(self.workout["video_path"]))
-            self.player.setLoops(QMediaPlayer.Loops.Infinite)
-            self.player.play()
-        else:
-            no_video = QLabel("No Video Preview")
-            no_video.setStyleSheet("color: #4a5568; background: transparent;")
-            no_video.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            video_layout.addWidget(no_video)
+        # --- Load Asset Image/GIF ---
+        asset_map = {
+            "Jumping Jacks": "Jumping jacks.gif",
+            "Push Ups": "Push ups.gif",
+            "Plank": "Plank.png",
+            "Crunches": "Crunches.gif",
+            "Squats": "Squats.gif",
+            "Cobra Stretch": "Cobra Stretch.png"
+        }
 
+        asset_filename = asset_map.get(self.workout["name"], None)
+
+        if asset_filename:
+            # Correct absolute path
+            abs_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "assets", asset_filename)
+            )
+            print("Loading asset from:", abs_path)  # DEBUG: should match your actual path
+
+            if os.path.exists(abs_path):
+                if abs_path.lower().endswith(".gif"):
+                    movie = QMovie(abs_path)
+                    movie.setScaledSize(QSize(280, 160))
+                    gif_label = QLabel()
+                    gif_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    gif_label.setMovie(movie)
+                    movie.start()
+                    video_layout.addWidget(gif_label)
+                else:
+                    pixmap = QPixmap(abs_path)
+                    pixmap = pixmap.scaled(
+                        280, 160,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    img_label = QLabel()
+                    img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    img_label.setPixmap(pixmap)
+                    video_layout.addWidget(img_label)
+            else:
+                fallback = QLabel(f"File not found:\n{abs_path}")
+                fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                video_layout.addWidget(fallback)
+        else:
+            fallback = QLabel("No Preview Available")
+            fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            video_layout.addWidget(fallback)
         layout.addWidget(video_container)
 
         # Reps/Time
-        # Reps / Time (from workout_plan table)
         unit = "seconds" if self.workout["name"] in ["Plank", "Cobra Stretch"] else "reps"
         target_val = self.workout.get("target", 0)
         target = QLabel(f"{target_val} {unit}")
@@ -144,12 +169,10 @@ class WorkoutCard(QFrame):
     def on_start_clicked(self):
         if self.is_locked:
             return
-
         main_win = self.window()
         if hasattr(main_win, "show_workout_demo"):
             main_win.show_workout_demo(self.workout["workout_id"])
-            
-            
+
 
 class Dashboard(QWidget):
     """Main professional dashboard component"""
@@ -161,7 +184,7 @@ class Dashboard(QWidget):
         self.trainee_id = None
         self.trainee = None
         self.workouts = []
-        self.completed_indices = set() # Track completion in current session
+        self.completed_indices = set()  # Track completion in current session
         self.init_ui()
 
     def init_ui(self):
@@ -170,7 +193,7 @@ class Dashboard(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 1. Top Navigation Bar (Professional)
+        # --- Top Navigation Bar ---
         nav_bar = QFrame()
         nav_bar.setFixedHeight(80)
         nav_bar.setStyleSheet("""
@@ -186,10 +209,8 @@ class Dashboard(QWidget):
         app_title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
         app_title.setStyleSheet("color: #667eea; background: transparent;")
         nav_layout.addWidget(app_title)
-        
         nav_layout.addStretch()
 
-        # Nav Buttons Style
         btn_style_template = """
             QPushButton {
                 background: %s;
@@ -204,15 +225,14 @@ class Dashboard(QWidget):
                 background: rgba(102, 126, 234, 0.3);
             }
         """
-        
         self.dash_btn = QPushButton("Dashboard")
         self.dash_btn.setStyleSheet(btn_style_template % ("rgba(102, 126, 234, 0.8)", "none"))
-        
+
         self.analytics_btn = QPushButton("Analytics")
         self.analytics_btn.setStyleSheet(btn_style_template % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
         self.analytics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.analytics_btn.clicked.connect(self.on_analytics_clicked)
-        
+
         self.profile_btn = QPushButton("Profile")
         self.profile_btn.setStyleSheet(btn_style_template % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
         self.profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -223,18 +243,19 @@ class Dashboard(QWidget):
         nav_layout.addWidget(self.analytics_btn)
         nav_layout.addSpacing(10)
         nav_layout.addWidget(self.profile_btn)
-        
+
         main_layout.addWidget(nav_bar)
 
-        # 2. Content Area
+        # --- Content Area ---
         content_wrapper = QWidget()
         content_layout = QVBoxLayout(content_wrapper)
         content_layout.setContentsMargins(50, 30, 50, 40)
         content_layout.setSpacing(25)
+
         # Header: User Info & Logout
         header_layout = QHBoxLayout()
         titles_layout = QVBoxLayout()
-        
+
         self.welcome_label = QLabel("Trainee: Loading...")
         self.welcome_label.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
         self.welcome_label.setStyleSheet("color: white; background: transparent;")
@@ -244,7 +265,7 @@ class Dashboard(QWidget):
         self.plan_label.setFont(QFont("Segoe UI", 16))
         self.plan_label.setStyleSheet("color: #667eea; background: transparent; font-weight: 500;")
         titles_layout.addWidget(self.plan_label)
-        
+
         self.subtitle_label = QLabel("Personalized Workout Schedule")
         self.subtitle_label.setFont(QFont("Segoe UI", 12))
         self.subtitle_label.setStyleSheet("color: #718096; background: transparent;")
@@ -275,13 +296,12 @@ class Dashboard(QWidget):
 
         content_layout.addLayout(header_layout)
 
-        # Scrollable Workout Grid
+        # --- Scrollable Workout Grid ---
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
-        
-        # Custom scrollbar style
+
         scroll.verticalScrollBar().setStyleSheet("""
             QScrollBar:vertical {
                 background: rgba(255, 255, 255, 0.05);
@@ -305,12 +325,10 @@ class Dashboard(QWidget):
         main_layout.addWidget(content_wrapper)
 
     def set_user(self, user_data):
-        """Set the current user and load their dashboard data"""
         self.trainee_id = user_data.get("trainee_id")
         self.load_dashboard_data()
 
     def load_dashboard_data(self):
-        """Load trainee info and workout plan from DB"""
         if not self.trainee_id:
             return
 
@@ -319,73 +337,52 @@ class Dashboard(QWidget):
             self.welcome_label.setText(f"Trainee: {self.trainee['name']}")
             level = self.trainee.get('fitness_level', 'Custom')
             self.plan_label.setText(f"Plan: {level}")
-            
-            # Fetch workouts
+
             self.workouts = get_workout_plan(self.trainee['plan_id'])
-            # Initial state: only first unlocked if none completed
             self.refresh_cards()
 
     def mark_exercise_completed(self, index):
-        """Called when a workout session for a specific exercise ends"""
         self.completed_indices.add(index)
-        
-        # Check if all completed
         if len(self.completed_indices) == len(self.workouts):
             self.finalize_session()
         else:
-            # Refresh to unlock next
             self.refresh_cards()
 
     def finalize_session(self):
-        """Save full session to DB once all are done"""
-        session_data = {}
-        for i, col in enumerate(WORKOUT_COLUMNS):
-            # Example: marking all as 1 (completed)
-            session_data[col] = 1
-            
+        session_data = {col: 1 for col in WORKOUT_COLUMNS}
         success, msg = save_workout_session(self.trainee_id, session_data)
         if success:
-            QMessageBox.information(self, "Session Complete", 
-                                  "Congratulations! You've completed your full workout session. Data has been saved.")
-            # Reset session
+            QMessageBox.information(self, "Session Complete",
+                                    "Congratulations! You've completed your full workout session. Data has been saved.")
             self.completed_indices.clear()
             self.refresh_cards()
         else:
             QMessageBox.critical(self, "Error", f"Failed to save session: {msg}")
 
     def refresh_cards(self):
-        """Clear and rebuild the workout grid based on completion sequence"""
-        # Clear grid
         for i in reversed(range(self.grid_layout.count())):
             item = self.grid_layout.itemAt(i)
             if item.widget():
                 item.widget().setParent(None)
 
-        # Sequence logic: 
-        # index 0 is always unlocked.
-        # index N is unlocked if index N-1 is in completed_indices.
         for i, workout in enumerate(self.workouts):
             is_locked = True
             if i == 0 or (i - 1) in self.completed_indices:
                 is_locked = False
-                
             card = WorkoutCard(workout, i, self.trainee_id, is_locked)
             row = i // 3
             col = i % 3
             self.grid_layout.addWidget(card, row, col)
 
     def refresh(self):
-        """Public method to refresh the dashboard"""
         self.load_dashboard_data()
 
     def on_profile_clicked(self):
-        """Notify main window to show profile"""
         main_win = self.window()
         if hasattr(main_win, "show_profile"):
             main_win.show_profile()
 
     def on_analytics_clicked(self):
-        """Notify main window to show analytics"""
         main_win = self.window()
         if hasattr(main_win, "show_analytics"):
             main_win.show_analytics()
