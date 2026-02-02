@@ -429,7 +429,10 @@ class AnalyticsScreen(QWidget):
         if color:
             item.setForeground(QColor(color))
         return item
-
+    
+    
     def on_profile_clicked(self):
-        # Placeholder method for profile button
-        print("Profile button clicked - add your handling here")
+        """Notify main window to show profile"""
+        main_win = self.window()
+        if hasattr(main_win, "show_profile"):
+            main_win.show_profile()
