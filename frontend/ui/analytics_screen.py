@@ -1,24 +1,29 @@
 """
-Analytics Screen - Workout Completion Summary
-Professional UI with tables and summary cards matching the overall theme
+Analytics Screen - Workout Completion Summary with Multiple Pie Charts and Bar Chart
 """
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QPushButton
+    QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QPushButton, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
+
 from backend.models.data_manager import session_analytics
 
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+
 class AnalyticsScreen(QWidget):
-    """Analytics screen showing workout completion summary"""
+    """Analytics screen showing workout completion summary and charts"""
     
     backRequested = pyqtSignal()
         
     def __init__(self, parent=None):
         super().__init__(parent)
         self.trainee_id = None
+        self.rep_totals = {}  # store rep data for pie charts & bar chart
         self.init_ui()
         
     def set_user(self, user_data):
@@ -33,7 +38,7 @@ class AnalyticsScreen(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 1. Top Navigation Bar (Consistent)
+        # Top Navigation Bar 
         nav_bar = QFrame()
         nav_bar.setFixedHeight(80)
         nav_bar.setStyleSheet("""
@@ -87,7 +92,7 @@ class AnalyticsScreen(QWidget):
         
         main_layout.addWidget(nav_bar)
 
-        # 2. Page Content with Scroll
+        # Page Content Scroll Area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -104,17 +109,21 @@ class AnalyticsScreen(QWidget):
         title.setStyleSheet("color: white; background: transparent;")
         content_layout.addWidget(title)
         
-        # Summary Overview
+        # Summary Cards Layout
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(20)
         
         self.total_sessions_card = self.create_summary_card("Total Sessions", "0")
         cards_layout.addWidget(self.total_sessions_card)
+
+        self.overall_accuracy_card = self.create_summary_card("Rep Based Workouts Overall Accuracy", "0%")
+        cards_layout.addWidget(self.overall_accuracy_card)
+        
         cards_layout.addStretch()
         
         content_layout.addLayout(cards_layout)
         
-        # Rep-Based Workout Table Section
+        # Rep-Based Workout Table
         rep_section_box = QFrame()
         rep_section_box.setStyleSheet("background: rgba(255, 255, 255, 0.04); border-radius: 20px; border: 1px solid rgba(255,255,255,0.08);")
         rep_sec_layout = QVBoxLayout(rep_section_box)
@@ -134,7 +143,7 @@ class AnalyticsScreen(QWidget):
         
         content_layout.addWidget(rep_section_box)
 
-        # Time-Based Workout Table Section
+        # Time-Based Workout Table
         time_section_box = QFrame()
         time_section_box.setStyleSheet("background: rgba(255, 255, 255, 0.04); border-radius: 20px; border: 1px solid rgba(255,255,255,0.08);")
         time_sec_layout = QVBoxLayout(time_section_box)
@@ -147,20 +156,59 @@ class AnalyticsScreen(QWidget):
         time_sec_layout.addSpacing(15)
         
         self.time_table = self.create_workout_table(
-            ["Workout", "Total Time Held"]
+            ["Workout", "Total Time Held (sec)"]
         )
         self.time_table.setMinimumHeight(150)
         time_sec_layout.addWidget(self.time_table)
 
         content_layout.addWidget(time_section_box)
+
+        # Charts Section (Bar chart + multiple Pie charts side by side)
+        charts_section_box = QFrame()
+        charts_section_box.setStyleSheet("background: rgba(255, 255, 255, 0.06); border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);")
+        charts_layout = QVBoxLayout(charts_section_box)
+        charts_layout.setContentsMargins(25, 25, 25, 25)
+        charts_layout.setSpacing(60)
+
+        charts_title = QLabel("Performance Visualizations")
+        charts_title.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        charts_title.setStyleSheet("color: #667eea; border: none;")
+        charts_layout.addWidget(charts_title)
+
+        # Bar Chart
+        self.fig_bar = Figure(dpi=100)
+        self.canvas_bar = FigureCanvas(self.fig_bar)
+        self.canvas_bar.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        self.canvas_bar.setMinimumHeight(300)
+        self.canvas_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        charts_layout.addWidget(self.canvas_bar)
+
+        # Pie Charts Layout (Side by side)
+        self.pie_charts_layout = QHBoxLayout()
+        self.pie_charts_layout.setSpacing(20)  # spacing between pie charts
+        charts_layout.addLayout(self.pie_charts_layout)
+
+        content_layout.addWidget(charts_section_box)
+
+        # Insight Label
+        self.insight_label = QLabel("")
+        self.insight_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        self.insight_label.setStyleSheet("color: #e2e8f0; padding: 10px;")
+        content_layout.addWidget(self.insight_label)
         
         scroll.setWidget(content_wrapper)
         main_layout.addWidget(scroll)
         
     def create_summary_card(self, label, value):
-        """Create a professional summary card widget"""
         card = QFrame()
-        card.setFixedWidth(250)
+        card.setMinimumWidth(220)
+        card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred
+        )
         card.setStyleSheet("""
             QFrame {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -191,7 +239,6 @@ class AnalyticsScreen(QWidget):
         return card
         
     def create_workout_table(self, headers):
-        """Create a highly styled workout statistics table"""
         table = QTableWidget()
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
@@ -232,18 +279,19 @@ class AnalyticsScreen(QWidget):
         return table
         
     def refresh_data(self):
-        """Refresh analytics data from DB"""
         if not self.trainee_id:
             return
             
         session_analytics.load_sessions(self.trainee_id)
         
-        # Update Summary Card
+        # Update summary cards
         self.total_sessions_card.findChild(QLabel, "value").setText(str(session_analytics.total_sessions))
         
-        # Aggregate Workouts
-        rep_totals = {} # workout_name -> [total, correct, wrong]
-        time_totals = {} # workout_name -> duration
+        rep_totals = {}
+        time_totals = {}
+
+        total_correct_all = 0
+        total_wrong_all = 0
 
         for s in session_analytics.sessions:
             if s.reps_completed > 0:
@@ -252,34 +300,128 @@ class AnalyticsScreen(QWidget):
                 rep_totals[s.exercise_name][0] += s.reps_completed
                 rep_totals[s.exercise_name][1] += s.correct_reps
                 rep_totals[s.exercise_name][2] += s.wrong_reps
+
+                total_correct_all += s.correct_reps
+                total_wrong_all += s.wrong_reps
+
             elif s.duration > 0:
                 if s.exercise_name not in time_totals:
                     time_totals[s.exercise_name] = 0
                 time_totals[s.exercise_name] += s.duration
 
-        # Populate Rep Table
+        total_all = total_correct_all + total_wrong_all
+        overall_acc = 0
+        if total_all > 0:
+            overall_acc = int((total_correct_all / total_all) * 100)
+        self.overall_accuracy_card.findChild(QLabel, "value").setText(f"{overall_acc}%")
+
+        self.rep_totals = rep_totals  # store for charts
+
+        
+        # Rep Table
         self.rep_table.setRowCount(len(rep_totals))
         for row, (name, stats) in enumerate(rep_totals.items()):
-            # Name
-            self.rep_table.setItem(row, 0, self._create_item(name, Qt.AlignmentFlag.AlignLeft))
-            # Total Reps
-            self.rep_table.setItem(row, 1, self._create_item(str(stats[0])))
-            # Correct
-            self.rep_table.setItem(row, 2, self._create_item(str(stats[1]), color="#48bb78"))
-            # Wrong
-            self.rep_table.setItem(row, 3, self._create_item(str(stats[2]), color="#f56565"))
+            total = stats[0]
+            correct = stats[1]
+            wrong = stats[2]
 
-        # Populate Time Table
+            self.rep_table.setItem(row, 0, self._create_item(name, Qt.AlignmentFlag.AlignLeft))
+            self.rep_table.setItem(row, 1, self._create_item(str(total)))
+            self.rep_table.setItem(row, 2, self._create_item(str(correct), color="#48bb78"))
+            self.rep_table.setItem(row, 3, self._create_item(str(wrong), color="#f56565"))
+
+        self.rep_table.setSortingEnabled(True)
+        self.rep_table.sortItems(1, Qt.SortOrder.DescendingOrder)
+        
+
+        # Time Table
         self.time_table.setRowCount(len(time_totals))
         for row, (name, duration) in enumerate(time_totals.items()):
             self.time_table.setItem(row, 0, self._create_item(name, Qt.AlignmentFlag.AlignLeft))
             self.time_table.setItem(row, 1, self._create_item(f"{duration} sec"))
 
-    def on_profile_clicked(self):
-        """Notify main window to show profile"""
-        main_win = self.window()
-        if hasattr(main_win, "show_profile"):
-            main_win.show_profile()
+
+        # Update bar chart
+        self.update_bar_chart(rep_totals)
+
+        # Update multiple pie charts side by side
+        self.update_multiple_pie_charts(rep_totals)
+
+    def update_bar_chart(self, rep_totals):
+        self.fig_bar.clear()
+        ax = self.fig_bar.add_subplot(111)
+
+        exercises = []
+        accuracies = []
+
+        for name, stats in rep_totals.items():
+            total = stats[0]
+            correct = stats[1]
+            if total > 0:
+                acc = (correct / total) * 100
+                exercises.append(name)
+                accuracies.append(acc)
+
+        ax.bar(exercises, accuracies, color='#667eea',width=0.3)
+        ax.set_ylim(0, 100)
+        ax.set_ylabel('Accuracy %')
+        ax.set_title('Accuracy Percentage per Workout')
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+        self.fig_bar.tight_layout()
+        self.canvas_bar.draw()
+
+    def update_multiple_pie_charts(self, rep_totals):
+        # Clear previous pie charts
+        while self.pie_charts_layout.count():
+            child = self.pie_charts_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        pie_exercises = ["Push-up", "Jumping Jack", "Squat", "Crunches"]
+
+        for ex_name in pie_exercises:
+            # 1️⃣ Force identical figure size
+            fig = Figure(figsize=(3.5, 3.5), dpi=100)
+            fig.patch.set_facecolor('#1e1e2f')
+
+            canvas = FigureCanvas(fig)
+
+            canvas.setMinimumSize(200, 200)
+            canvas.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Expanding
+            )
+
+            # 3️⃣ Lock axis position (CRITICAL)
+            ax = fig.add_axes([0.1, 0.15, 0.8, 0.7])
+            ax.set_facecolor('#1e1e2f')
+
+            data = rep_totals.get(ex_name)
+
+            if not data or (data[1] == 0 and data[2] == 0):
+                ax.text(
+                    0.5, 0.5, 'No Data',
+                    ha='center', va='center',
+                    fontsize=14, color='white',
+                    transform=ax.transAxes
+                )
+            else:
+                correct = data[1]
+                wrong = data[2]
+
+                ax.pie(
+                    [correct, wrong],
+                    colors=['#48bb78', '#f56565'],
+                    autopct='%1.1f%%',
+                    startangle=90,
+                    textprops={'color': 'white', 'fontsize': 10}
+                )
+
+            # 4️⃣ Title placement fixed
+            ax.set_title(ex_name, color='white', fontsize=14, pad=10)
+            ax.axis('equal')
+
+            self.pie_charts_layout.addWidget(canvas)
 
     def _create_item(self, text, alignment=Qt.AlignmentFlag.AlignCenter, color=None):
         item = QTableWidgetItem(text)
@@ -287,3 +429,7 @@ class AnalyticsScreen(QWidget):
         if color:
             item.setForeground(QColor(color))
         return item
+
+    def on_profile_clicked(self):
+        # Placeholder method for profile button
+        print("Profile button clicked - add your handling here")

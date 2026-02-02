@@ -155,7 +155,7 @@ def get_trainee_info(trainee_id):
 
 
 
-"""
+
 def get_workout_plan(plan_id):
     connection = get_db_connection()
     if not connection:
@@ -178,7 +178,7 @@ def get_workout_plan(plan_id):
         ]
     finally:
         close_connection(connection, cursor)
-"""
+
 
 def get_workout_plan(plan_id):
     connection = get_db_connection()
