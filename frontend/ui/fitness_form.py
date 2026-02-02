@@ -196,8 +196,9 @@ class FitnessForm(QWidget):
             "Jul","Aug","Sep","Oct","Nov","Dec"
         ])
 
-        for y in range(1976, 2026):
+        for y in range(1976, 2027):
             self.year_input.addItem(str(y))
+        self.year_input.setCurrentText("2026")
 
         for cb in (self.day_input, self.month_input, self.year_input):
             cb.setFixedHeight(40)
