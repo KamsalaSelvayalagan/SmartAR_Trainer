@@ -123,7 +123,7 @@ def get_all_workouts():
         close_connection(connection, cursor)
 
 # =====================================================
-# DASHBOARD & WORKOUT PLAN
+# Workout & WORKOUT PLAN
 # =====================================================
 
 WORKOUT_COLUMNS = [
@@ -357,3 +357,158 @@ class SessionAnalytics:
 
 # ✅ THIS LINE FIXES YOUR ERROR
 session_analytics = SessionAnalytics()
+# =====================================================
+# FORGOT PASSWORD (USED BY LoginScreen UI)
+# =====================================================
+
+def check_email_exists(email: str) -> bool:
+    """Return True if the email exists in trainee table."""
+    connection = get_db_connection()
+    if not connection:
+        return False
+
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 FROM trainee WHERE email = ? LIMIT 1", (email,))
+        return cursor.fetchone() is not None
+    except sqlite3.Error:
+        return False
+    finally:
+        close_connection(connection, cursor)
+
+
+def verify_password_match(email: str, password: str) -> bool:
+    """
+    Return True if the given password matches the current password in DB.
+    Used to prevent setting the same old password again.
+    """
+    connection = get_db_connection()
+    if not connection:
+        return False
+
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT 1 FROM trainee WHERE email = ? AND pwd = ? LIMIT 1",
+            (email, password)
+        )
+        return cursor.fetchone() is not None
+    except sqlite3.Error:
+        return False
+    finally:
+        close_connection(connection, cursor)
+
+
+def update_password(email: str, new_password: str):
+    """
+    Update the password for the given email.
+    Returns: (success: bool, message: str)
+    """
+    connection = get_db_connection()
+    if not connection:
+        return False, "Database connection failed"
+
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "UPDATE trainee SET pwd = ? WHERE email = ?",
+            (new_password, email)
+        )
+        connection.commit()
+
+        if cursor.rowcount == 0:
+            return False, "Email not found"
+
+        return True, "Password updated"
+    except sqlite3.Error as e:
+        return False, f"Database error: {e}"
+    finally:
+        close_connection(connection, cursor)
+        
+
+
+# =====================================================
+# PLAN PROMOTION
+# =====================================================
+
+def promote_trainee_plan(trainee_id, new_plan_id):
+    connection = get_db_connection()
+    if not connection:
+        return False, "DB connection failed"
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            UPDATE trainee
+            SET plan_id = ?
+            WHERE trainee_id = ?
+        """, (new_plan_id, trainee_id))
+
+        connection.commit()
+
+        return True, "Plan updated"
+
+    except sqlite3.Error as e:
+        return False, str(e)
+
+    finally:
+        close_connection(connection, cursor)
+        
+
+# =====================================================
+# RESET AFTER PROMOTION
+# =====================================================
+
+def reset_sessions_after_promotion(trainee_id):
+    connection = get_db_connection()
+    if not connection:
+        return False, "DB connection failed"
+
+    try:
+        cursor = connection.cursor()
+
+        # DELETE old sessions → fresh start
+        cursor.execute("""
+            DELETE FROM workout_session
+            WHERE trainee_id = ?
+        """, (trainee_id,))
+
+        connection.commit()
+        return True, "Sessions reset"
+
+    except sqlite3.Error as e:
+        return False, str(e)
+
+    finally:
+        close_connection(connection, cursor)
+
+
+def update_fitness_level(trainee_id, plan_id):
+    level_map = {
+        1: "Beginner",
+        2: "Intermediate",
+        3: "Advanced"
+    }
+
+    connection = get_db_connection()
+    if not connection:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            UPDATE trainee
+            SET fitness_level = ?
+            WHERE trainee_id = ?
+        """, (level_map.get(plan_id, "Custom"), trainee_id))
+
+        connection.commit()
+        return True
+
+    finally:
+        close_connection(connection, cursor)

@@ -6,8 +6,16 @@ Diagonal split design with static branding
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFrame, QStackedWidget,
                              QCheckBox, QMessageBox, QGraphicsColorizeEffect)
-from PyQt6.QtCore import Qt, pyqtSignal, QRect
+from PyQt6.QtCore import Qt, pyqtSignal, QRect, QTimer
 from PyQt6.QtGui import QFont, QColor, QPalette, QPainter, QPainterPath, QLinearGradient
+
+import re
+from backend.utils.email_service import generate_otp, send_otp_simulated, OTPInputDialog
+from backend.models.data_manager import (
+    check_email_exists, 
+    update_password, 
+    verify_password_match
+)
 
 
 class DiagonalSplitWidget(QWidget):
@@ -47,6 +55,135 @@ class DiagonalSplitWidget(QWidget):
         painter.fillPath(path, gradient)
         
         painter.end()
+
+
+class ForgotPasswordDialog(QMessageBox):
+    """Dialog for handling password reset via OTP"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.email = ""
+        self.otp = ""
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Reset Password")
+        self.setIcon(QMessageBox.Icon.Question)
+        self.setText("Please choose an option:")
+        
+        self.setStyleSheet("""
+            QMessageBox {
+                background-color: #0f172a;
+                color: white;
+            }
+            QLabel {
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit {
+                background: white;
+                color: #333;
+                border: 1px solid #667eea;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton {
+                background: #667eea;
+                color: white;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #764ba2;
+            }
+        """)
+
+    def start_flow(self):
+        # Step 1: Get Email
+        from PyQt6.QtWidgets import QInputDialog, QLineEdit
+        email, ok = QInputDialog.getText(
+            self.parent(), "Reset Password", 
+            "Enter your registered email:", 
+            QLineEdit.EchoMode.Normal
+        )
+        
+        if not ok or not email:
+            return
+            
+        if not check_email_exists(email):
+            QMessageBox.critical(self.parent(), "Error", "This email is not registered.")
+            return
+            
+        self.email = email
+        self.otp = generate_otp()
+        
+        # Step 2: Send OTP (Simulated)
+        send_otp_simulated(email, self.otp, self.parent(), "Password Reset Request")
+        
+        # Define resend callback
+        def resend():
+            self.otp = generate_otp()
+            send_otp_simulated(email, self.otp, self.parent(), "Password Reset")
+
+        # Step 3: Verify OTP (Using new custom dialog)
+        otp_input, ok = OTPInputDialog.get_otp(
+            email, 
+            title="Reset Password", 
+            description=f"Enter the code sent to {email} to reset your password",
+            parent=self.parent(),
+            resend_callback=resend
+        )
+        
+        if not ok or not otp_input:
+            return
+            
+        if otp_input != self.otp:
+            QMessageBox.critical(self.parent(), "Error", "Invalid OTP.")
+            return
+            
+        while True:
+            # Step 4: New Password
+            new_password, ok = QInputDialog.getText(
+                self.parent(), "New Password",
+                "Enter your new password (min 6 characters):",
+                QLineEdit.EchoMode.Password
+            )
+            
+            if not ok:
+                return
+                
+            if len(new_password) < 6:
+                QMessageBox.warning(self.parent(), "Validation Error", "Password must be at least 6 characters.")
+                continue
+
+            # Check if new password is same as old one
+            if verify_password_match(self.email, new_password):
+                QMessageBox.critical(self.parent(), "Security Check", "New password cannot be the same as your old password.")
+                continue
+
+            # Step 5: Confirm Password
+            confirm_password, ok = QInputDialog.getText(
+                self.parent(), "Confirm Password",
+                "Confirm your new password:",
+                QLineEdit.EchoMode.Password
+            )
+            
+            if not ok:
+                return
+                
+            if new_password != confirm_password:
+                QMessageBox.critical(self.parent(), "Validation Error", "Passwords do not match. Please try again.")
+                continue
+            
+            # If all checks pass, break from the loop
+            break
+            
+        # Update in database
+        success, msg = update_password(self.email, new_password)
+        if success:
+            QMessageBox.information(self.parent(), "Success", "Password updated successfully! You can now login.")
+        else:
+            QMessageBox.critical(self.parent(), "Error", f"Failed to update password: {msg}")
 
 
 class LoginScreen(QWidget):
@@ -197,18 +334,37 @@ class LoginScreen(QWidget):
         self.login_password.setStyleSheet(self.get_input_style())
         layout.addWidget(self.login_password)
         
-        # Remember me checkbox
-        remember_layout = QHBoxLayout()
+        # Remember me checkbox and Forgot Password
+        options_layout = QHBoxLayout()
         remember_cb = QCheckBox("Remember me")
         remember_cb.setStyleSheet("color: white; background: transparent;")
-        remember_layout.addWidget(remember_cb)
-        remember_layout.addStretch()
-        layout.addLayout(remember_layout)
+        options_layout.addWidget(remember_cb)
+        
+        options_layout.addStretch()
+        
+        forgot_btn = QPushButton("Forgot Password?")
+        forgot_btn.setCursor(Qt.CursorShape(13))
+        forgot_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: rgba(255, 255, 255, 0.8);
+                border: none;
+                font-size: 13px;
+                text-decoration: underline;
+            }
+            QPushButton:hover {
+                color: white;
+            }
+        """)
+        forgot_btn.clicked.connect(self.handle_forgot_password)
+        options_layout.addWidget(forgot_btn)
+        
+        layout.addLayout(options_layout)
         
         # Login button
         login_btn = QPushButton("SIGN IN")
         login_btn.setMinimumHeight(45)
-        login_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        login_btn.setCursor(Qt.CursorShape(13))
         login_btn.setStyleSheet(self.get_button_style())
         login_btn.clicked.connect(self.handle_login)
         layout.addWidget(login_btn)
@@ -231,7 +387,7 @@ class LoginScreen(QWidget):
                 color: #e0e0e0;
             }
         """)
-        switch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        switch_btn.setCursor(Qt.CursorShape(13))
         switch_btn.clicked.connect(lambda: self.form_stack.setCurrentIndex(1))
         
         switch_layout.addStretch()
@@ -302,7 +458,7 @@ class LoginScreen(QWidget):
         # Register button
         self.register_btn = QPushButton("SIGN UP")
         self.register_btn.setMinimumHeight(45)
-        self.register_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.register_btn.setCursor(Qt.CursorShape(13))
         self.register_btn.setStyleSheet(self.get_button_style())
         self.register_btn.clicked.connect(self.handle_register)
         layout.addWidget(self.register_btn)
@@ -325,7 +481,7 @@ class LoginScreen(QWidget):
                 color: #e0e0e0;
             }
         """)
-        switch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        switch_btn.setCursor(Qt.CursorShape(13))
         switch_btn.clicked.connect(lambda: self.form_stack.setCurrentIndex(0))
         
         switch_layout.addStretch()
@@ -371,13 +527,27 @@ class LoginScreen(QWidget):
             }
         """
 
+    def handle_forgot_password(self):
+        """Handle forgot password click"""
+        dialog = ForgotPasswordDialog(self)
+        dialog.start_flow()
+
+    def is_valid_email(self, email):
+        """Validate email format using regex"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+
     def handle_login(self):
-        """Handle login button click"""
+        """Handle login button click with validation"""
         email = self.login_email.text().strip()
         password = self.login_password.text()
         
         if not email or not password:
-            QMessageBox.warning(self, "Error", "Please fill in all fields")
+            QMessageBox.warning(self, "Validation Error", "Please fill in all fields.")
+            return
+
+        if not self.is_valid_email(email):
+            QMessageBox.warning(self, "Validation Error", "Please enter a valid email address.")
             return
 
         from backend.models.data_manager import login_user
@@ -388,7 +558,43 @@ class LoginScreen(QWidget):
             self.loginSuccess.emit(user_data)
         else:
             QMessageBox.critical(self, "Login Failed", message)
+
+    def handle_register(self):
+        """Handle registration button click with validation"""
+        username = self.register_username.text().strip()
+        email = self.register_email.text().strip()
+        password = self.register_password.text()
+        confirm = self.register_confirm.text()
+        
+        if not all([username, email, password, confirm]):
+            QMessageBox.warning(self, "Validation Error", "Please fill in all fields.")
+            return
             
+        if not self.is_valid_email(email):
+            QMessageBox.warning(self, "Validation Error", "Please enter a valid email address.")
+            return
+
+        if len(password) < 6:
+            QMessageBox.warning(self, "Validation Error", "Password must be at least 6 characters.")
+            return
+
+        if password != confirm:
+            QMessageBox.warning(self, "Validation Error", "Passwords do not match.")
+            return
+
+        # Check if email already exists
+        if check_email_exists(email):
+            QMessageBox.critical(self, "Error", "This email is already registered.")
+            return
+
+        # Instead of registering now, emit signal to continue to fitness form
+        reg_data = {
+            "name": username,
+            "email": email,
+            "password": password
+        }
+        self.registerContinue.emit(reg_data)
+
     def check_register_fields(self):
         """Update button text based on field population"""
         username = self.register_username.text().strip()
@@ -400,29 +606,6 @@ class LoginScreen(QWidget):
             self.register_btn.setText("CONTINUE")
         else:
             self.register_btn.setText("SIGN UP")
-
-    def handle_register(self):
-        """Handle registration button click (Continue to fitness form)"""
-        username = self.register_username.text().strip()
-        email = self.register_email.text().strip()
-        password = self.register_password.text()
-        confirm = self.register_confirm.text()
-        
-        if not all([username, email, password, confirm]):
-            QMessageBox.warning(self, "Error", "Please fill in all fields")
-            return
-            
-        if password != confirm:
-            QMessageBox.warning(self, "Error", "Passwords do not match")
-            return
-
-        # Instead of registering now, emit signal to continue to fitness form
-        reg_data = {
-            "name": username,
-            "email": email,
-            "password": password
-        }
-        self.registerContinue.emit(reg_data)
 
     def clear_inputs(self):
         """Clear login and registration inputs"""

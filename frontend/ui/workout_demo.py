@@ -6,6 +6,9 @@ Workout Demo Screen (LOCAL ASSETS)
 ✅ Controls are ALWAYS visible (not clipped/hidden)
 ✅ Auto-pause when screen is hidden / closed / back
 ✅ Dark styled QMessageBox + QDialog (NO white background behind text)
+✅ Navigation integrated:
+   - Back -> main_win.back_from_workout_demo()
+   - Start -> main_win.show_workout_session(workout_id)
 """
 
 import os
@@ -24,9 +27,6 @@ from PyQt6.QtMultimediaWidgets import QVideoWidget
 from backend.models import data_manager
 
 
-# ==================================================
-# Main WorkoutDemo Screen
-# ==================================================
 class WorkoutDemo(QWidget):
     """Exercise preview screen with local asset preview + instructions"""
 
@@ -35,14 +35,15 @@ class WorkoutDemo(QWidget):
         "push ups": "Push ups.mp4",
         "crunches": "Crunches.mp4",
         "jumping jacks": "Jumping jacks.mp4",
-        "cobra stretch": "Cobra Stretch.png",
         "plank": "Plank.mp4",
+        "cobra stretch": "Cobra stretch.mp4"
     }
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.current_workout_id = None
+        self.camera_permission_granted = False
 
         # GIF
         self.movie = None
@@ -52,14 +53,41 @@ class WorkoutDemo(QWidget):
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
 
+        # ✅ Sound ON by default
+        self.audio.setVolume(1.0)          # 0.0 to 1.0
+        self.is_muted = False
+
+
+        # ✅ connect error handler (NOW exists as a class method)
+        self.player.errorOccurred.connect(self.on_media_error)
+
         # Seek state
         self.is_seeking = False
+
+        # UI refs
+        self.video_widget = None
+        self.preview_label = None
+        self.controls_container = None
+        self.play_btn = None
+        self.mute_btn = None
+        self.icon_volume = None
+        self.icon_muted = None
+        self.seek_slider = None
+        self.current_time_lbl = None
+        self.total_time_lbl = None
+        self.title_label = None
+        self.muscles_label = None
+        self.instructions_text = None
+        self.start_btn = None
+
+        self.icon_play = None
+        self.icon_pause = None
 
         self.init_ui()
         self.hook_player_signals()
 
     # ==================================================
-    # ✅ Dark styles (UPDATED: white border for buttons)
+    # ✅ Dark styles (white border buttons)
     # ==================================================
     def _apply_dark_msgbox_style(self, msg: QMessageBox):
         msg.setStyleSheet("""
@@ -81,10 +109,9 @@ class WorkoutDemo(QWidget):
                 color: #ffffff;
                 font-size: 16px;
                 font-weight: 600;
-                padding: 4px 16px;     /* ⬅ compact */
+                padding: 4px 16px;
                 min-width: 64px;
-                          
-                border: 1px solid rgba(255,255,255,0.75);   /* ✅ WHITE BORDER */
+                border: 1px solid rgba(255,255,255,0.75);
                 border-radius: 8px;
             }
 
@@ -119,11 +146,10 @@ class WorkoutDemo(QWidget):
                 color: #ffffff;
                 font-size: 14px;
                 font-weight: 600;
-                min-width: 70px;        /* ⬅ smaller */
+                min-width: 70px;
                 min-height: 30px;
-                padding: 4px 14px;    
-
-                border: 1px solid rgba(255,255,255,0.75);   /* ✅ WHITE BORDER */
+                padding: 4px 14px;
+                border: 1px solid rgba(255,255,255,0.75);
                 border-radius: 6px;
             }
 
@@ -138,22 +164,6 @@ class WorkoutDemo(QWidget):
             }
         """)
 
-    # ==================================================
-    # Auto pause on screen change / close
-    # ==================================================
-    def hideEvent(self, event):
-        if self.player:
-            self.player.pause()
-        super().hideEvent(event)
-
-    def closeEvent(self, event):
-        if self.player:
-            self.player.pause()
-        super().closeEvent(event)
-
-    # ==================================================
-    # Helper: show dark styled message box
-    # ==================================================
     def show_dialog(self, title: str, message: str, icon=QMessageBox.Icon.Information):
         msg = QMessageBox(self)
         msg.setWindowTitle(title)
@@ -163,14 +173,47 @@ class WorkoutDemo(QWidget):
         msg.exec()
 
     # ==================================================
+    # ✅ Player error handler (FIXED)
+    # ==================================================
+    def on_media_error(self, error, error_string=""):
+        # friendly fallback when codecs/plugins are missing
+        self.stop_preview()
+        if self.preview_label:
+            self.preview_label.setText(
+                "Video preview unavailable on this PC.\n"
+                "Tip: Install a media codec pack (Windows) or use GIF previews."
+            )
+            self.preview_label.setVisible(True)
+        if self.video_widget:
+            self.video_widget.setVisible(False)
+
+    # ==================================================
+    # Auto pause/stop on screen change / close
+    # ==================================================
+    def hideEvent(self, event):
+        self._pause_preview()
+        super().hideEvent(event)
+
+    def closeEvent(self, event):
+        self._pause_preview()
+        super().closeEvent(event)
+
+    def resizeEvent(self, event):
+        # keep GIF and image scaled nicely when resizing
+        self._refresh_scaled_preview()
+        super().resizeEvent(event)
+
+    # ==================================================
     def init_ui(self):
-        self.setStyleSheet("background:#f4f6fb;")
+        # NOTE: your back/title are white, so background should be dark
+        self.setStyleSheet("background:#0f0f10;")
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(40, 30, 40, 30)
         main_layout.setSpacing(20)
 
         # ================= Back Button =================
-        back_btn = QPushButton("← Back to Dashboard")
+        back_btn = QPushButton("← Back")
         back_btn.setMaximumWidth(220)
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.setStyleSheet("""
@@ -183,7 +226,7 @@ class WorkoutDemo(QWidget):
             QPushButton:hover { color: #667eea; }
         """)
         back_btn.clicked.connect(self.go_back)
-        main_layout.addWidget(back_btn)
+        main_layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         # ================= Title =================
         self.title_label = QLabel("Workout Demo")
@@ -265,16 +308,54 @@ class WorkoutDemo(QWidget):
 
         self.play_btn.setIcon(self.icon_play)
         self.play_btn.setIconSize(QSize(18, 18))
-
         self.play_btn.setStyleSheet("""
             QPushButton {
-                background: #667eea;
-                border-radius: 8px;
-                border: none;
+                background: #eef2ff;
+                border: 2px solid #667eea;
+                border-radius: 10px;
             }
-            QPushButton:hover { background: #764ba2; }
+            QPushButton:hover {
+                background: #e0e7ff;
+            }
+            QPushButton:pressed {
+                background: #c7d2fe;
+            }
+            QPushButton:checked {
+                background: #ddd6fe;              /* slightly different when playing */
+                border: 2px solid #764ba2;
+            }
         """)
         self.play_btn.clicked.connect(self.toggle_play_pause)
+
+        # ✅ Speaker/Mute button
+        self.mute_btn = QPushButton()
+        self.mute_btn.setFixedSize(44, 34)
+        self.mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Icons (Qt standard)
+        self.icon_volume = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume)
+        self.icon_muted = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolumeMuted)
+
+        self.mute_btn.setIcon(self.icon_volume)   # sound ON initially
+        self.mute_btn.setIconSize(QSize(18, 18))
+        self.mute_btn.setStyleSheet("""
+            QPushButton {
+                background: #eef2ff;                  /* light blue */
+                border: 2px solid #667eea;
+                border-radius: 10px;
+            }
+            QPushButton:hover {
+                background: #e0e7ff;
+            }
+            QPushButton:pressed {
+                background: #c7d2fe;
+            }
+            QPushButton:checked {
+                background: #fee2e2;                  /* light red when muted */
+                border: 2px solid #ef4444;
+            }
+        """)
+        self.mute_btn.clicked.connect(self.toggle_mute)
 
         self.current_time_lbl = QLabel("00:00")
         self.current_time_lbl.setStyleSheet("color:#111827; font-size:12px;")
@@ -308,6 +389,7 @@ class WorkoutDemo(QWidget):
         self.total_time_lbl.setStyleSheet("color:#111827; font-size:12px;")
 
         controls_row.addWidget(self.play_btn)
+        controls_row.addWidget(self.mute_btn)      # ✅ NEW speaker icon near play
         controls_row.addWidget(self.current_time_lbl)
         controls_row.addWidget(self.seek_slider, 1)
         controls_row.addWidget(self.total_time_lbl)
@@ -410,6 +492,8 @@ class WorkoutDemo(QWidget):
 
     # ==================================================
     def assets_path(self, filename: str) -> str:
+        # this file is: frontend/ui/workout_demo.py
+        # assets are:   frontend/assets/
         frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         return os.path.join(frontend_dir, "assets", filename)
 
@@ -431,6 +515,7 @@ class WorkoutDemo(QWidget):
             self.show_dialog("Not Found", "Workout not found", QMessageBox.Icon.Warning)
             return
 
+        # expected: (name, muscles?, description)
         workout_name, _, description = row
 
         self.title_label.setText(workout_name)
@@ -440,6 +525,8 @@ class WorkoutDemo(QWidget):
         self.preview_asset(workout_name)
 
     # ==================================================
+    # Cleanup preview state
+    # ==================================================
     def stop_preview(self):
         # Stop GIF
         if self.movie:
@@ -447,22 +534,38 @@ class WorkoutDemo(QWidget):
             self.movie = None
 
         # Stop video
-        self.player.pause()
-        self.player.setSource(QUrl())
+        if self.player:
+            self.player.pause()
+            self.player.setSource(QUrl())
 
         # Reset controls
-        self.controls_container.hide()
-        self.play_btn.setIcon(self.icon_play)
-        self.seek_slider.setRange(0, 0)
-        self.seek_slider.setValue(0)
-        self.current_time_lbl.setText("00:00")
-        self.total_time_lbl.setText("00:00")
+        if self.controls_container:
+            self.controls_container.hide()
+        if self.play_btn and self.icon_play:
+            self.play_btn.setIcon(self.icon_play)
+        if self.seek_slider:
+            self.seek_slider.setRange(0, 0)
+            self.seek_slider.setValue(0)
+        if self.current_time_lbl:
+            self.current_time_lbl.setText("00:00")
+        if self.total_time_lbl:
+            self.total_time_lbl.setText("00:00")
 
         # Reset UI
-        self.video_widget.hide()
-        self.preview_label.show()
-        self.preview_label.setText("No Preview")
-        self.preview_label.setPixmap(QPixmap())
+        if self.video_widget:
+            self.video_widget.hide()
+        if self.preview_label:
+            self.preview_label.show()
+            self.preview_label.setText("No Preview")
+            self.preview_label.setPixmap(QPixmap())
+            self.preview_label.setMovie(None)
+        
+        # ✅ Reset mute state for next time (optional)
+        self.is_muted = False
+        self.audio.setMuted(False)
+        if self.mute_btn and self.icon_volume:
+            self.mute_btn.setIcon(self.icon_volume)
+
 
     # ==================================================
     def preview_asset(self, workout_name: str):
@@ -500,9 +603,9 @@ class WorkoutDemo(QWidget):
         self.preview_label.hide()
         self.video_widget.show()
 
+        # ✅ always show controls for mp4
         self.controls_container.show()
         self.controls_container.raise_()
-        self.controls_container.repaint()
 
         self.player.setSource(QUrl.fromLocalFile(video_path))
         self.player.play()
@@ -513,26 +616,37 @@ class WorkoutDemo(QWidget):
 
         self.movie = QMovie(gif_path)
         self.movie.setCacheMode(QMovie.CacheMode.CacheAll)
-        self.movie.setScaledSize(self.preview_label.size())
         self.preview_label.setMovie(self.movie)
+
+        self._refresh_scaled_preview()
         self.movie.start()
 
     def show_image(self, img_path: str):
         self.stop_preview()
         self.controls_container.hide()
 
-        pix = QPixmap(img_path)
-        if pix.isNull():
-            self.preview_label.setText("Image Load Failed")
-            return
+        self._last_image_path = img_path
+        self._refresh_scaled_preview()
 
-        self.preview_label.setPixmap(
-            pix.scaled(
-                self.preview_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
+    def _refresh_scaled_preview(self):
+        # scale GIF
+        if self.movie and self.preview_label:
+            self.movie.setScaledSize(self.preview_label.size())
+
+        # scale image
+        img_path = getattr(self, "_last_image_path", None)
+        if img_path and self.preview_label:
+            pix = QPixmap(img_path)
+            if pix.isNull():
+                self.preview_label.setText("Image Load Failed")
+                return
+            self.preview_label.setPixmap(
+                pix.scaled(
+                    self.preview_label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
             )
-        )
 
     # ==================================================
     # Controls
@@ -567,6 +681,16 @@ class WorkoutDemo(QWidget):
     def on_seek_released(self):
         self.player.setPosition(self.seek_slider.value())
         self.is_seeking = False
+    
+    def toggle_mute(self):
+        self.is_muted = not self.is_muted
+        self.audio.setMuted(self.is_muted)
+
+        if self.is_muted:
+            self.mute_btn.setIcon(self.icon_muted)
+        else:
+            self.mute_btn.setIcon(self.icon_volume)
+
 
     @staticmethod
     def format_ms(ms: int) -> str:
@@ -576,57 +700,29 @@ class WorkoutDemo(QWidget):
         return f"{minutes:02d}:{seconds:02d}"
 
     # ==================================================
-    def start_workout(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Camera Permission")
-        dialog.setFixedSize(420, 190)
-
-        # ✅ Apply dark dialog style (with white-bordered buttons)
-        self._apply_dark_dialog_style(dialog)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
-
-        label = QLabel("This workout requires access to your camera.\nDo you want to allow camera access?")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(20)
-
-        yes_btn = QPushButton("Yes")
-        no_btn = QPushButton("No")
-        button_layout.addStretch()
-        button_layout.addWidget(yes_btn)
-        button_layout.addWidget(no_btn)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-
-        def on_yes():
-            dialog.accept()
-            self.open_camera_screen()
-
-        def on_no():
-            dialog.reject()
-            self.show_dialog("Permission Denied", "Camera access denied. Cannot start workout.", QMessageBox.Icon.Critical)
-
-        yes_btn.clicked.connect(on_yes)
-        no_btn.clicked.connect(on_no)
-
-        dialog.exec()
-
+    # Navigation / screen switching
     # ==================================================
+    def _pause_preview(self):
+        if self.player:
+            self.player.pause()
+
+    def start_workout(self):
+        # ✅ pause preview BEFORE permission dialog
+        self._pause_preview()
+
+        self.open_camera_screen()
+    
+    
+
     def open_camera_screen(self):
         main_win = self.window()
         if hasattr(main_win, "show_workout_session"):
             main_win.show_workout_session(self.current_workout_id)
 
-    # ==================================================
     def go_back(self):
-        self.player.pause()
+        self._pause_preview()
         self.stop_preview()
 
         main_win = self.window()
-        if hasattr(main_win, "back_to_dashboard_from_demo"):
-            main_win.back_to_dashboard_from_demo()
+        if hasattr(main_win, "back_from_workout_demo"):
+            main_win.back_from_workout_demo()

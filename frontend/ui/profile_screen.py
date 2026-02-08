@@ -80,11 +80,11 @@ class ProfileScreen(QWidget):
             }
         """
         
-        self.dash_btn = QPushButton("Dashboard")
+        self.dash_btn = QPushButton("Workout")
         self.dash_btn.setStyleSheet(btn_style % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
         self.dash_btn.clicked.connect(self.backRequested.emit)
         
-        self.analytics_btn = QPushButton("Analytics")
+        self.analytics_btn = QPushButton("Dashboard")
         self.analytics_btn.setStyleSheet(btn_style % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
         self.analytics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.analytics_btn.clicked.connect(self.on_analytics_clicked)
@@ -92,9 +92,9 @@ class ProfileScreen(QWidget):
         self.profile_btn = QPushButton("Profile")
         self.profile_btn.setStyleSheet(btn_style % ("rgba(102, 126, 234, 0.8)", "none"))
 
-        nav_layout.addWidget(self.dash_btn)
-        nav_layout.addSpacing(10)
         nav_layout.addWidget(self.analytics_btn)
+        nav_layout.addSpacing(10)
+        nav_layout.addWidget(self.dash_btn)
         nav_layout.addSpacing(10)
         nav_layout.addWidget(self.profile_btn)
         
