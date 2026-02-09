@@ -425,7 +425,7 @@ class AnalyticsScreen(QWidget):
 
         lbl_widget = QLabel(label.upper())
         lbl_widget.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        lbl_widget.setStyleSheet("color: #667eea; letter-spacing: 1px; border: none;")
+        lbl_widget.setStyleSheet("color: #fbbf24; letter-spacing: 1px; border: none;")
         lbl_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_widget)
         
@@ -451,7 +451,7 @@ class AnalyticsScreen(QWidget):
             }
             QHeaderView::section {
                 background: rgba(102, 126, 234, 0.1);
-                color: #667eea;
+                color: #fbbf24;
                 padding: 12px;
                 border: none;
                 font-weight: bold;

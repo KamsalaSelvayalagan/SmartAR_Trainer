@@ -116,7 +116,7 @@ class WorkoutSession(QWidget):
         self.dash_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dash_btn.clicked.connect(lambda: self.sessionEnded.emit())
 
-        self.analytics_btn = QPushButton("Analytics")
+        self.analytics_btn = QPushButton("Dashboard")
         self.analytics_btn.setStyleSheet(btn_style)
         self.analytics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.analytics_btn.clicked.connect(self.on_analytics_clicked)
