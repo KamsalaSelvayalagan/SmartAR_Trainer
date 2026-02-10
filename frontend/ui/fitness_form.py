@@ -2,6 +2,13 @@
 Fitness Details Form for user onboarding
 Integrated with SQLite database
 LIGHT MODE VERSION
+
+✅ Updates requested:
+- Frequency (workout days per week) default = 0 (so user must choose)
+- Validation ensures frequency is given when Experience = Yes
+- Gender + Experience radios NOT preselected
+- DOB must be explicitly selected (DD/MMM/YYYY placeholders)
+- Height + Weight must be explicitly entered (touched)
 """
 
 from PyQt6.QtWidgets import (
@@ -17,12 +24,26 @@ from PyQt6.QtGui import QFont
 class FitnessForm(QWidget):
     """Comprehensive fitness details form"""
 
-    formCompleted = pyqtSignal(dict) # Emits all fitness data
-    backRequested = pyqtSignal()   # Emits when back button clicked
+    formCompleted = pyqtSignal(dict)  # Emits all fitness data
+    backRequested = pyqtSignal()      # Emits when back button clicked
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # Track whether user actually touched key inputs
+        self._dob_touched = False
+        self._height_touched = False
+        self._weight_touched = False
+        self._duration_touched = False
+        self._frequency_touched = False
+
         self.init_ui()
+
+    # ======================================================
+    # ✅ Helper: show validation messages
+    # ======================================================
+    def show_error(self, title: str, message: str):
+        QMessageBox.warning(self, title, message)
 
     def init_ui(self):
         # ================= Scroll Area =================
@@ -68,7 +89,6 @@ class FitnessForm(QWidget):
         # ================= Title =================
         title = QLabel("Complete Your Fitness Profile")
         title.setFont(QFont("Segoe UI", 36, QFont.Weight.ExtraBold))
-        # Professional vibrant gradient-like color
         title.setStyleSheet("""
             QLabel {
                 color: #667eea;
@@ -183,26 +203,39 @@ class FitnessForm(QWidget):
             row.addWidget(widget)
             return container
 
-        # ================= DOB =================
+        # ================= DOB (force user selection) =================
         self.day_input = QComboBox()
         self.month_input = QComboBox()
         self.year_input = QComboBox()
 
+        self.day_input.addItem("DD")
         for d in range(1, 32):
             self.day_input.addItem(f"{d:02d}")
 
+        self.month_input.addItem("MMM")
         self.month_input.addItems([
-            "Jan","Feb","Mar","Apr","May","Jun",
-            "Jul","Aug","Sep","Oct","Nov","Dec"
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
         ])
 
-        for y in range(1976, 2027):
+        self.year_input.addItem("YYYY")
+        for y in range(1976, 2006):
             self.year_input.addItem(str(y))
-        self.year_input.setCurrentText("2026")
 
         for cb in (self.day_input, self.month_input, self.year_input):
             cb.setFixedHeight(40)
             cb.setStyleSheet(input_style)
+
+        def update_dob_touched():
+            self._dob_touched = (
+                self.day_input.currentIndex() != 0 and
+                self.month_input.currentIndex() != 0 and
+                self.year_input.currentIndex() != 0
+            )
+
+        self.day_input.currentIndexChanged.connect(lambda _: update_dob_touched())
+        self.month_input.currentIndexChanged.connect(lambda _: update_dob_touched())
+        self.year_input.currentIndexChanged.connect(lambda _: update_dob_touched())
 
         dob_container = QWidget()
         dob_container.setFixedWidth(500)
@@ -218,15 +251,16 @@ class FitnessForm(QWidget):
         dob_layout.addWidget(self.day_input)
         dob_layout.addWidget(self.month_input)
         dob_layout.addWidget(self.year_input)
-
         card_layout.addWidget(dob_container)
 
-        # ================= Gender =================
+        # ================= Gender (no default selection) =================
         gender_label = QLabel("Gender")
         gender_label.setStyleSheet(label_style)
         gender_label.setMinimumWidth(200)
 
         self.gender_group = QButtonGroup()
+        self.gender_group.setExclusive(True)
+
         self.male_radio = QRadioButton("Male")
         self.female_radio = QRadioButton("Female")
         self.other_radio = QRadioButton("Other")
@@ -234,8 +268,6 @@ class FitnessForm(QWidget):
         for rb in (self.male_radio, self.female_radio, self.other_radio):
             rb.setStyleSheet(radio_style)
             self.gender_group.addButton(rb)
-
-        self.male_radio.setChecked(True)
 
         gender_box = QWidget()
         gender_box.setFixedWidth(500)
@@ -245,33 +277,37 @@ class FitnessForm(QWidget):
         gender_layout.addWidget(self.male_radio)
         gender_layout.addWidget(self.female_radio)
         gender_layout.addWidget(self.other_radio)
-
         card_layout.addWidget(gender_box)
 
-        # ================= Height & Weight =================
+        # ================= Height & Weight (require user interaction) =================
         self.height_input = QDoubleSpinBox()
         self.height_input.setRange(100, 250)
         self.height_input.setSuffix(" cm")
-        self.height_input.setValue(170)
+        self.height_input.setValue(100)  # placeholder-like default
+        self.height_input.valueChanged.connect(lambda _: setattr(self, "_height_touched", True))
         card_layout.addWidget(create_row("Height", self.height_input))
 
         self.weight_input = QDoubleSpinBox()
         self.weight_input.setRange(30, 200)
         self.weight_input.setSuffix(" kg")
-        self.weight_input.setValue(70)
+        self.weight_input.setValue(30)  # placeholder-like default
+        self.weight_input.valueChanged.connect(lambda _: setattr(self, "_weight_touched", True))
         card_layout.addWidget(create_row("Weight", self.weight_input))
 
-        # ================= Workout Experience =================
+        # ================= Workout Experience (no default selection) =================
         exp_label = QLabel("Do you have previous workout experience?")
         exp_label.setStyleSheet(label_style)
         exp_label.setMinimumWidth(200)
 
+        self.workout_exp_group = QButtonGroup()
+        self.workout_exp_group.setExclusive(True)
+
         self.workout_yes_radio = QRadioButton("Yes")
         self.workout_no_radio = QRadioButton("No")
-        self.workout_no_radio.setChecked(True)
 
         for rb in (self.workout_yes_radio, self.workout_no_radio):
             rb.setStyleSheet(radio_style)
+            self.workout_exp_group.addButton(rb)
 
         exp_box = QWidget()
         exp_box.setFixedWidth(500)
@@ -280,7 +316,6 @@ class FitnessForm(QWidget):
         exp_layout.addWidget(exp_label)
         exp_layout.addWidget(self.workout_yes_radio)
         exp_layout.addWidget(self.workout_no_radio)
-
         card_layout.addWidget(exp_box)
 
         # ================= Experience Details =================
@@ -288,25 +323,37 @@ class FitnessForm(QWidget):
         exp_details_layout = QVBoxLayout(self.exp_details_widget)
 
         self.duration_input = QDoubleSpinBox()
+        self.duration_input.setRange(0, 600)
         self.duration_input.setSuffix(" mins")
+        self.duration_input.setValue(0)
+        self.duration_input.valueChanged.connect(lambda _: setattr(self, "_duration_touched", True))
 
         self.freq_input = QSpinBox()
-        self.freq_input.setRange(1, 7)
+        self.freq_input.setRange(0, 7)     # ✅ allow 0 as default (means "not selected")
         self.freq_input.setSuffix(" days")
+        self.freq_input.setValue(0)        # ✅ default 0
+        self.freq_input.valueChanged.connect(lambda _: setattr(self, "_frequency_touched", True))
 
         exp_details_layout.addWidget(create_row("Workout duration per day?", self.duration_input))
         exp_details_layout.addWidget(create_row("Workout days per week?", self.freq_input))
 
         self.exp_details_widget.setVisible(False)
-        self.workout_yes_radio.toggled.connect(
-            lambda checked: self.exp_details_widget.setVisible(checked)
-        )
 
+        def on_experience_yes_toggled(checked: bool):
+            self.exp_details_widget.setVisible(checked)
+            # Reset "touched" flags + values when they hide the section (choose No)
+            if not checked:
+                self._duration_touched = False
+                self._frequency_touched = False
+                self.duration_input.setValue(0)
+                self.freq_input.setValue(0)
+
+        self.workout_yes_radio.toggled.connect(on_experience_yes_toggled)
         card_layout.addWidget(self.exp_details_widget)
 
         # ================= Actions =================
         actions_layout = QHBoxLayout()
-        
+
         back_btn = QPushButton("Back")
         back_btn.setMinimumHeight(55)
         back_btn.setStyleSheet("""
@@ -324,7 +371,7 @@ class FitnessForm(QWidget):
             }
         """)
         back_btn.clicked.connect(self.backRequested.emit)
-        
+
         submit_btn = QPushButton("Sign Up")
         submit_btn.setMinimumHeight(55)
         submit_btn.setStyleSheet("""
@@ -343,7 +390,7 @@ class FitnessForm(QWidget):
             }
         """)
         submit_btn.clicked.connect(self.handle_submit)
-        
+
         actions_layout.addWidget(back_btn, 1)
         actions_layout.addWidget(submit_btn, 2)
         card_layout.addLayout(actions_layout)
@@ -362,31 +409,82 @@ class FitnessForm(QWidget):
         main.addWidget(scroll)
 
     # ======================================================
+    # ✅ Validations enforced here
+    # ======================================================
     def handle_submit(self):
+        # ---- DOB must be selected (not placeholders)
+        if self.day_input.currentIndex() == 0 or self.month_input.currentIndex() == 0 or self.year_input.currentIndex() == 0:
+            self.show_error("Validation Error", "Please select your full Date of Birth (Day, Month, and Year).")
+            return
+
+        # ---- Gender must be selected
+        if self.gender_group.checkedButton() is None:
+            self.show_error("Validation Error", "Please select your Gender.")
+            return
+
+        # ---- Height & Weight must be actively set by user
+        if not self._height_touched:
+            self.show_error("Validation Error", "Please enter your Height.")
+            return
+        if not self._weight_touched:
+            self.show_error("Validation Error", "Please enter your Weight.")
+            return
+
+        height = float(self.height_input.value())
+        weight = float(self.weight_input.value())
+
+        if not (100 <= height <= 250):
+            self.show_error("Validation Error", "Height must be between 100 cm and 250 cm.")
+            return
+        if not (30 <= weight <= 200):
+            self.show_error("Validation Error", "Weight must be between 30 kg and 200 kg.")
+            return
+
+        # ---- Workout experience must be selected
+        exp_btn = self.workout_exp_group.checkedButton()
+        if exp_btn is None:
+            self.show_error("Validation Error", "Please select your workout experience (Yes/No).")
+            return
+
+        has_exp = (exp_btn.text() == "Yes")
+
+        duration = float(self.duration_input.value()) if has_exp else 0.0
+        frequency = int(self.freq_input.value()) if has_exp else 0
+
+        # ---- If Experience = Yes, require user interaction + valid values
+        if has_exp:
+            if not self._duration_touched:
+                self.show_error("Validation Error", "Please enter your workout duration per day.")
+                return
+            if not self._frequency_touched:
+                self.show_error("Validation Error", "Please enter your workout days per week.")
+                return
+
+            if duration <= 0:
+                self.show_error("Validation Error", "Workout duration must be greater than 0 minutes.")
+                return
+
+            # ✅ frequency must be 1..7; 0 means "not chosen"
+            if frequency == 0:
+                self.show_error("Validation Error", "Please select workout days per week (1 to 7).")
+                return
+            if not (1 <= frequency <= 7):
+                self.show_error("Validation Error", "Workout days per week must be between 1 and 7.")
+                return
+
+        # ---- Build DOB
         day = self.day_input.currentText()
         month = self.month_input.currentText()
         year = self.year_input.currentText()
 
         month_map = {
-            "Jan":"01","Feb":"02","Mar":"03","Apr":"04",
-            "May":"05","Jun":"06","Jul":"07","Aug":"08",
-            "Sep":"09","Oct":"10","Nov":"11","Dec":"12"
+            "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+            "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+            "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
         }
-
         dob = f"{year}-{month_map[month]}-{day}"
 
-        gender = (
-            "Male" if self.male_radio.isChecked()
-            else "Female" if self.female_radio.isChecked()
-            else "Other"
-        )
-
-        height = self.height_input.value()
-        weight = self.weight_input.value()
-
-        has_exp = self.workout_yes_radio.isChecked()
-        duration = self.duration_input.value() if has_exp else 0
-        frequency = int(self.freq_input.value()) if has_exp else 0
+        gender = self.gender_group.checkedButton().text()
 
         fitness_data = {
             "dob": dob,
@@ -402,8 +500,9 @@ class FitnessForm(QWidget):
 
     def get_data(self):
         """Helper to get current state for data preservation"""
-        # This is a bit simplified, but emits the same dict structure
-        has_exp = self.workout_yes_radio.isChecked()
+        exp_btn = self.workout_exp_group.checkedButton()
+        has_exp = (exp_btn is not None and exp_btn.text() == "Yes")
+
         return {
             "dob_day": self.day_input.currentIndex(),
             "dob_month": self.month_input.currentIndex(),
@@ -413,29 +512,60 @@ class FitnessForm(QWidget):
             "gender_other": self.other_radio.isChecked(),
             "height": self.height_input.value(),
             "weight": self.weight_input.value(),
-            "workout_exp": has_exp,
+            "workout_exp_yes": self.workout_yes_radio.isChecked(),
+            "workout_exp_no": self.workout_no_radio.isChecked(),
             "duration": self.duration_input.value(),
-            "frequency": self.freq_input.value()
+            "frequency": self.freq_input.value(),
+            "touched_dob": self._dob_touched,
+            "touched_height": self._height_touched,
+            "touched_weight": self._weight_touched,
+            "touched_duration": self._duration_touched,
+            "touched_frequency": self._frequency_touched
         }
 
     def set_data(self, data):
         """Restore state for data preservation"""
-        if not data: return
+        if not data:
+            return
+
         self.day_input.setCurrentIndex(data.get("dob_day", 0))
         self.month_input.setCurrentIndex(data.get("dob_month", 0))
         self.year_input.setCurrentIndex(data.get("dob_year", 0))
-        
-        if data.get("gender_male"): self.male_radio.setChecked(True)
-        elif data.get("gender_female"): self.female_radio.setChecked(True)
-        elif data.get("gender_other"): self.other_radio.setChecked(True)
-        
-        self.height_input.setValue(data.get("height", 170))
-        self.weight_input.setValue(data.get("weight", 70))
-        
-        if data.get("workout_exp"): 
-            self.workout_yes_radio.setChecked(True)
+
+        # Restore gender (or clear)
+        if data.get("gender_male"):
+            self.male_radio.setChecked(True)
+        elif data.get("gender_female"):
+            self.female_radio.setChecked(True)
+        elif data.get("gender_other"):
+            self.other_radio.setChecked(True)
         else:
+            self.gender_group.setExclusive(False)
+            self.male_radio.setChecked(False)
+            self.female_radio.setChecked(False)
+            self.other_radio.setChecked(False)
+            self.gender_group.setExclusive(True)
+
+        self.height_input.setValue(float(data.get("height", 100)))
+        self.weight_input.setValue(float(data.get("weight", 30)))
+
+        # Restore experience (or clear)
+        if data.get("workout_exp_yes"):
+            self.workout_yes_radio.setChecked(True)
+        elif data.get("workout_exp_no"):
             self.workout_no_radio.setChecked(True)
-            
-        self.duration_input.setValue(data.get("duration", 0))
-        self.freq_input.setValue(data.get("frequency", 0))
+        else:
+            self.workout_exp_group.setExclusive(False)
+            self.workout_yes_radio.setChecked(False)
+            self.workout_no_radio.setChecked(False)
+            self.workout_exp_group.setExclusive(True)
+
+        self.duration_input.setValue(float(data.get("duration", 0)))
+        self.freq_input.setValue(int(data.get("frequency", 0)))  # ✅ keep default 0
+
+        # Restore touched flags
+        self._dob_touched = bool(data.get("touched_dob", False))
+        self._height_touched = bool(data.get("touched_height", False))
+        self._weight_touched = bool(data.get("touched_weight", False))
+        self._duration_touched = bool(data.get("touched_duration", False))
+        self._frequency_touched = bool(data.get("touched_frequency", False))
