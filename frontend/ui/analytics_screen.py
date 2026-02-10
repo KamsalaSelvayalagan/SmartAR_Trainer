@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QPushButton, QSizePolicy, QGridLayout
+    QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QPushButton, QSizePolicy, QGridLayout, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
@@ -21,7 +21,7 @@ class AnalyticsScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.trainee_id = None
-        self.rep_totals = {}  # store rep data for summary tables
+        self.rep_totals = {}  
         self.init_ui()
         
     def set_user(self, user_data):
@@ -207,11 +207,11 @@ class AnalyticsScreen(QWidget):
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(20)
         
-        #3️⃣ Total Score Card
+        # Total Score Card
         self.total_score_card = self.create_summary_card("Total Score", "0/4800")
         cards_layout.addWidget(self.total_score_card)
 
-        #4️⃣ Remaining Score Card
+        # Remaining Score Card
         self.remaining_score_card = self.create_summary_card("Remaining Score", "4800")
         cards_layout.addWidget(self.remaining_score_card)
 
@@ -220,7 +220,7 @@ class AnalyticsScreen(QWidget):
         
         content_layout.addLayout(cards_layout)
         
-        # WORKOUT CALENDAR / TRACKER (MARK ONLY)
+        # WORKOUT CALENDAR / TRACKER
         tracker_section_box = QFrame()
         tracker_section_box.setStyleSheet("""
         QFrame {
@@ -305,7 +305,6 @@ class AnalyticsScreen(QWidget):
         title.setStyleSheet("color: #667eea;")
         charts_layout.addWidget(title)
 
-        # 👇 THIS WAS MISSING
         self.line_charts_layout = QGridLayout()
         self.line_charts_layout.setHorizontalSpacing(25)
         self.line_charts_layout.setVerticalSpacing(25)
@@ -333,7 +332,7 @@ class AnalyticsScreen(QWidget):
         title.setStyleSheet("color: #667eea;")
         accuracy_layout_main.addWidget(title)
 
-        # 👇 NEW LAYOUT ONLY FOR BAR CHART
+        # LAYOUT ONLY FOR BAR CHART
         self.accuracy_layout = QVBoxLayout()
         accuracy_layout_main.addLayout(self.accuracy_layout)
 
@@ -379,21 +378,14 @@ class AnalyticsScreen(QWidget):
 
         content_layout.addWidget(time_section_box)
         
-        self.promo_msg = QLabel("")
-        self.promo_msg.setStyleSheet("""
-            QLabel {
-                background-color: #48bb78;  /* green */
-                color: white;
-                border-radius: 12px;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 14px;
-                max-width: 280px;
-            }
-        """)
-        self.promo_msg.setVisible(False)
-        content_layout.insertWidget(2, self.promo_msg)
-
+    def show_popup_message(self, title: str, message: str, icon=QMessageBox.Icon.Information):
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setIcon(icon)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+    
                 
     def create_summary_card(self, label, value):
         card = QFrame()
@@ -425,7 +417,7 @@ class AnalyticsScreen(QWidget):
 
         lbl_widget = QLabel(label.upper())
         lbl_widget.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        lbl_widget.setStyleSheet("color: #fbbf24; letter-spacing: 1px; border: none;")
+        lbl_widget.setStyleSheet("color: #667eea; letter-spacing: 1px; border: none;")
         lbl_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_widget)
         
@@ -451,7 +443,7 @@ class AnalyticsScreen(QWidget):
             }
             QHeaderView::section {
                 background: rgba(102, 126, 234, 0.1);
-                color: #fbbf24;
+                color: #667eea;
                 padding: 12px;
                 border: none;
                 font-weight: bold;
@@ -545,7 +537,7 @@ class AnalyticsScreen(QWidget):
         """
         rates = {}
 
-        # ----- 1) REP BASED (SAME AS BEFORE) -----
+        # ----- 1) REP BASED  -----
         for name, stats in self.rep_totals.items():
             total = stats[0]
             correct = stats[1]
@@ -555,7 +547,7 @@ class AnalyticsScreen(QWidget):
             else:
                 rates[name] = 0
 
-        # ----- 2) TIME BASED (YOUR NEW LOGIC) -----
+        # ----- 2) TIME BASED  -----
         time_totals = {}
         session_counts = {}
 
@@ -597,7 +589,7 @@ class AnalyticsScreen(QWidget):
         rates = self.calculate_success_rates()
 
         # ----- Condition A -----
-        points_ok = total_points >= getattr(self, "plan_max_points", 4800)  # fallback to 4800
+        points_ok = total_points >= getattr(self, "plan_max_points", 4800)  
 
         # ----- Condition B -----
         exercises_ok = all(rate >= 60 for rate in rates.values())
@@ -640,20 +632,35 @@ class AnalyticsScreen(QWidget):
 
         self.update_session_tracker(session_analytics.total_sessions)
         
-        # Rep Table
+        # ================= REP BASED TABLE =================
+
+        rep_totals = {}
+
+        # Collect and SUM all sessions
+        for s in session_analytics.sessions:
+            if s.reps_completed > 0:
+                name = s.exercise_name
+
+                if name not in rep_totals:
+                    rep_totals[name] = {"total": 0, "correct": 0, "wrong": 0}
+
+                rep_totals[name]["total"] += s.reps_completed
+                rep_totals[name]["correct"] += s.correct_reps
+                rep_totals[name]["wrong"] += s.wrong_reps
+
+        # Clear table before refill 
+        self.rep_table.setRowCount(0)
+
         self.rep_table.setRowCount(len(rep_totals))
-        for row, (name, stats) in enumerate(rep_totals.items()):
-            total = stats[0]
-            correct = stats[1]
-            wrong = stats[2]
 
-            self.rep_table.setItem(row, 0, self._create_item(name, Qt.AlignmentFlag.AlignLeft))
-            self.rep_table.setItem(row, 1, self._create_item(str(total)))
-            self.rep_table.setItem(row, 2, self._create_item(str(correct), color="#48bb78"))
-            self.rep_table.setItem(row, 3, self._create_item(str(wrong), color="#f56565"))
+        for row, (name, data) in enumerate(rep_totals.items()):
+            item = self._create_item(name)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self.rep_table.setItem(row, 0, item)
+            self.rep_table.setItem(row, 1, self._create_item(str(data["total"])))
+            self.rep_table.setItem(row, 2, self._create_item(str(data["correct"]), color="#48bb78"))
+            self.rep_table.setItem(row, 3, self._create_item(str(data["wrong"]), color="#f56565"))
 
-        self.rep_table.setSortingEnabled(True)
-        self.rep_table.sortItems(1, Qt.SortOrder.DescendingOrder)
         
 
         # Time Table
@@ -664,6 +671,40 @@ class AnalyticsScreen(QWidget):
 
 
         promoted, total_points, rates = self.check_promotion_status()
+            # ================= RESET LEVEL IF FAILED AFTER 60 SESSIONS =================
+        if session_analytics.total_sessions >= 60:
+
+            # If FAILED promotion conditions
+            if not promoted:
+
+                from backend.models.data_manager import reset_sessions_after_promotion
+
+                # Reset all session data in DB
+                reset_sessions_after_promotion(self.trainee_id)
+
+                # Reset local analytics memory
+                session_analytics.sessions.clear()
+                session_analytics.total_sessions = 0
+                self.rep_totals = {}
+
+                # Reset UI tracker
+                self.update_session_tracker(0)
+
+                # Reset Score Cards
+                self.total_score_card.findChild(QLabel, "value").setText(f"0/{self.plan_max_points}")
+                self.remaining_score_card.findChild(QLabel, "value").setText(str(self.plan_max_points))
+
+                # Show warning popup
+                self.show_popup_message(
+                    "Level Restarted",
+                    "⚠ You completed 60 sessions but did not meet promotion criteria.\nLevel restarted from Session 1!",
+                    icon=QMessageBox.Icon.Warning
+                )
+
+                return   # STOP refresh here
+
+        
+        
         
         # ===== AUTO PROMOTION LOGIC =====
         if promoted:
@@ -682,19 +723,19 @@ class AnalyticsScreen(QWidget):
                 ok, msg = promote_trainee_plan(self.trainee_id, next_plan)
 
                 if ok:
-                    # ✅ 1. Reset all old sessions
+                    # 1. Reset all old sessions
                     reset_sessions_after_promotion(self.trainee_id)
 
-                    # ✅ 2. Update level name
+                    # 2. Update level name
                     update_fitness_level(self.trainee_id, next_plan)
 
-                    # ✅ 3. Clear local analytics memory
+                    # 3. Clear local analytics memory
                     session_analytics.sessions.clear()
                     session_analytics.total_sessions = 0
 
                     self.rep_totals = {}
 
-                    # ✅ 4. Reload NEW plan
+                    # 4. Reload NEW plan
                     trainee = get_trainee_info(self.trainee_id)
 
                     level = trainee.get("fitness_level", f"Level {next_plan}")
@@ -714,7 +755,7 @@ class AnalyticsScreen(QWidget):
 
                     self.plan_max_points = self.calculate_plan_max_points(plan_dict)
 
-                    # ✅ 5. Reset UI
+                    # 5. Reset UI
                     self.update_session_tracker(0)
                     
                     total_points = 0
@@ -723,17 +764,16 @@ class AnalyticsScreen(QWidget):
                     self.total_score_card.findChild(QLabel, "value").setText(f"0/{self.plan_max_points}")
                     self.remaining_score_card.findChild(QLabel, "value").setText(str(self.plan_max_points))
                     
-                     # Show the congratulation message
-                    self.promo_msg.setText(f"🎉 Congratulations! Promoted to next level: {level} 🎉")
-                    self.promo_msg.setVisible(True)
-
-                    
-                    QTimer.singleShot(5000, lambda: self.promo_msg.setVisible(False))
+                    self.show_popup_message(
+                        "Promotion",
+                        f"🎉 Congratulations! Promoted to next level: {level} 🎉",
+                        icon=QMessageBox.Icon.Information
+                    )
         
         
         self.update_line_charts_from_sessions()
         
-        # ----- Put bar chart in SEPARATE box -----
+        
 
         # clear old
         while self.accuracy_layout.count():
@@ -788,11 +828,11 @@ class AnalyticsScreen(QWidget):
                 time_data[s.exercise_name].append(s.duration)
 
         row, col = 0, 0
-        MAX_COLS = 2
+        MAX_COLS = 1
 
         # ===== REP LINE CHARTS =====
         for ex in rep_exercises:
-            fig = Figure(figsize=(4, 3))
+            fig = Figure(figsize=(6, 10))
             ax = fig.add_subplot(111)
 
             y_correct = rep_data[ex]["c"]
@@ -802,7 +842,7 @@ class AnalyticsScreen(QWidget):
             ax.plot(x, y_correct, marker="o", label="Correct Reps")
             ax.plot(x, y_wrong, marker="o", label="Wrong Reps")
 
-            # ✅ FIX 1: correct plan target
+            # correct plan target
             plan_name = self.normalize_exercise_name(ex)
             target = self.plan_targets.get(plan_name, max(y_correct + [0]) + 1)
 
@@ -810,7 +850,7 @@ class AnalyticsScreen(QWidget):
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))
             
 
-            ax.set_xticks(x)   # ✅ FIX 2
+            ax.set_xticks(x)  
 
             ax.set_title(f"{ex} (Target: {target})")
             ax.set_xlabel("Session")
@@ -819,7 +859,7 @@ class AnalyticsScreen(QWidget):
             ax.grid(True)
 
             canvas = FigureCanvas(fig)
-            canvas.setMinimumSize(380, 280)
+            canvas.setMinimumSize(900, 500)
             canvas.draw()
 
             self.line_charts_layout.addWidget(canvas, row, col)
@@ -831,7 +871,7 @@ class AnalyticsScreen(QWidget):
 
         # ===== TIME LINE CHARTS =====
         for ex in time_exercises:
-            fig = Figure(figsize=(4, 3))
+            fig = Figure(figsize=(6, 14))
             ax = fig.add_subplot(111)
 
             y = time_data[ex]
@@ -843,10 +883,9 @@ class AnalyticsScreen(QWidget):
             target = self.plan_targets.get(plan_name, max(y + [0]) + 1)
 
             ax.set_ylim(0, target)
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-            
+            ax.set_yticks(range(0, target + 1, 3))        
 
-            ax.set_xticks(x)   # ✅ FIX 2
+            ax.set_xticks(x)  
 
             ax.set_title(f"{ex} (Target: {target} sec)")
             ax.set_xlabel("Session")
@@ -855,7 +894,7 @@ class AnalyticsScreen(QWidget):
             ax.grid(True)
 
             canvas = FigureCanvas(fig)
-            canvas.setMinimumSize(380, 280)
+            canvas.setMinimumSize(1000, 700)
             canvas.draw()
 
             self.line_charts_layout.addWidget(canvas, row, col)
@@ -880,7 +919,7 @@ class AnalyticsScreen(QWidget):
 
         rates = self.calculate_success_rates()
 
-        # ----- FIXED ORDER -----
+        # ----- ORDER -----
         order = [
             "Jumping Jack",
             "Push-up",
@@ -895,7 +934,7 @@ class AnalyticsScreen(QWidget):
 
         for ex in order:
             acc = rates.get(ex, 0)
-            acc = min(100, round(acc, 1))   # cap at 100
+            acc = min(100, round(acc, 1)) 
             exercises.append(ex)
             values.append(acc)
 
@@ -917,6 +956,7 @@ class AnalyticsScreen(QWidget):
         for i, v in enumerate(values):
             ax.text(i, v + 1, f"{v}%", ha="center", fontsize=9)
 
+        ax.set_xticks(range(len(exercises)))
         ax.set_xticklabels(exercises, rotation=20)
 
         canvas = FigureCanvas(fig)
@@ -925,8 +965,6 @@ class AnalyticsScreen(QWidget):
 
         return canvas
 
-
-    
             
     
     def update_session_tracker(self, completed_sessions):
