@@ -23,6 +23,7 @@ from backend.models.data_manager import (
     save_workout_session,
     WORKOUT_COLUMNS
 )
+from backend.utils.activity_tracker import update_last_activity
 
 
 class Workout(QWidget):
@@ -407,6 +408,9 @@ class Workout(QWidget):
         success, msg = save_workout_session(self.trainee_id, session_data)
 
         if success:
+            
+            update_last_activity(self.trainee_id)
+            
             self.session_completed = True
             QMessageBox.information(self, "Session Saved",
                                     "Workout session completed and saved successfully!")

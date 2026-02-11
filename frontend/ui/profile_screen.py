@@ -1,6 +1,5 @@
 """
-User Profile Screen with Edit Capabilities
-Professional UI with glassmorphism and matching theme
+User Profile Screen with editable email
 """
 
 from PyQt6.QtWidgets import (
@@ -9,14 +8,15 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont
 
 from backend.models.data_manager import get_trainee, update_trainee
 
 
-class ProfileScreen(QWidget):
-    """User profile and settings screen"""
+FONT_MAIN = "Segoe UI Variable"
 
+
+class ProfileScreen(QWidget):
     backRequested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -26,374 +26,298 @@ class ProfileScreen(QWidget):
         self.edit_mode = False
         self.init_ui()
 
+    # ---------------- DATA ----------------
     def set_user(self, user_data):
-        """Set user ID and load data"""
         self.trainee_id = user_data.get("trainee_id")
         self.load_data()
 
     def load_data(self):
-        """Fetch latest trainee data from DB"""
         if not self.trainee_id:
             return
-            
         self.profile = get_trainee(self.trainee_id)
         if self.profile:
             self.refresh_display()
 
+    # ---------------- UI ----------------
     def init_ui(self):
-        self.setStyleSheet("background: transparent;")
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        # 1. Top Navigation Bar (Consistent)
-        nav_bar = QFrame()
-        nav_bar.setFixedHeight(80)
-        nav_bar.setStyleSheet("""
-            QFrame {
-                background: rgba(15, 12, 41, 0.4);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        # Improved background
+        self.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1c1c2e, stop:1 #121221);
             }
         """)
-        nav_layout = QHBoxLayout(nav_bar)
-        nav_layout.setContentsMargins(50, 0, 50, 0)
+        main = QVBoxLayout(self)
+        main.setContentsMargins(0, 0, 0, 0)
 
-        app_title = QLabel("SmartARTrainer")
-        app_title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        app_title.setStyleSheet("color: #667eea; background: transparent;")
-        nav_layout.addWidget(app_title)
-        
-        nav_layout.addStretch()
-
-        btn_style = """
-            QPushButton {
-                background: %s;
-                color: white;
-                border: %s;
-                border-radius: 8px;
-                padding: 8px 20px;
-                font-weight: bold;
-                font-size: 14px;
+        # ---------- NAV BAR ----------
+        nav = QFrame()
+        nav.setFixedHeight(86)
+        nav.setStyleSheet("""
+            QFrame {
+                background: rgba(28,28,46,0.95);
+                border-bottom: 1px solid rgba(255,255,255,0.12);
             }
-            QPushButton:hover {
-                background: rgba(102, 126, 234, 0.3);
-            }
-        """
-        
-        self.dash_btn = QPushButton("Workout")
-        self.dash_btn.setStyleSheet(btn_style % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
-        self.dash_btn.clicked.connect(self.backRequested.emit)
-        
-        self.analytics_btn = QPushButton("Dashboard")
-        self.analytics_btn.setStyleSheet(btn_style % ("transparent", "1px solid rgba(255, 255, 255, 0.4)"))
-        self.analytics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.analytics_btn.clicked.connect(self.on_analytics_clicked)
-        
-        self.profile_btn = QPushButton("Profile")
-        self.profile_btn.setStyleSheet(btn_style % ("rgba(102, 126, 234, 0.8)", "none"))
+        """)
+        nav_l = QHBoxLayout(nav)
+        nav_l.setContentsMargins(50, 0, 50, 0)
 
-        nav_layout.addWidget(self.analytics_btn)
-        nav_layout.addSpacing(10)
-        nav_layout.addWidget(self.dash_btn)
-        nav_layout.addSpacing(10)
-        nav_layout.addWidget(self.profile_btn)
-        
-        main_layout.addWidget(nav_bar)
+        title = QLabel("SmartARTrainer")
+        title.setFont(QFont(FONT_MAIN, 26, QFont.Weight.ExtraBold))
+        title.setStyleSheet("color:#7c8cff;")
+        nav_l.addWidget(title)
+        nav_l.addStretch()
 
-        # 2. Page Content
+        def nav_btn(text, active=False):
+            btn = QPushButton(text)
+            btn.setFont(QFont(FONT_MAIN, 14, QFont.Weight.Bold))
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {'rgba(102,126,234,0.9)' if active else 'transparent'};
+                    color: white;
+                    border-radius: 10px;
+                    padding: 10px 22px;
+                    border: {'none' if active else '1px solid rgba(255,255,255,0.35)'};
+                }}
+                QPushButton:hover {{
+                    background: rgba(102,126,234,0.35);
+                }}
+            """)
+            return btn
+
+        dash_btn = nav_btn("Workout")
+        dash_btn.clicked.connect(self.backRequested.emit)
+
+        analytics_btn = nav_btn("Dashboard")
+        analytics_btn.clicked.connect(self.on_analytics_clicked)
+
+        profile_btn = nav_btn("Profile", True)
+
+        nav_l.addWidget(analytics_btn)
+        nav_l.addSpacing(12)
+        nav_l.addWidget(dash_btn)
+        nav_l.addSpacing(12)
+        nav_l.addWidget(profile_btn)
+
+        main.addWidget(nav)
+
+        # ---------- CONTENT ----------
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
-        
-        content_wrapper = QWidget()
-        content_layout = QVBoxLayout(content_wrapper)
-        content_layout.setContentsMargins(50, 30, 50, 40)
-        content_layout.setSpacing(25)
 
-        # Header Title and Edit Button
-        header_row = QHBoxLayout()
-        title = QLabel("My Profile")
-        title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
-        title.setStyleSheet("color: white; background: transparent;")
-        header_row.addWidget(title)
-        
-        header_row.addStretch()
-        
+        wrap = QWidget()
+        lay = QVBoxLayout(wrap)
+        lay.setContentsMargins(60, 40, 60, 50)
+        lay.setSpacing(40)
+
+        # Header
+        head = QHBoxLayout()
+        h = QLabel("My Profile")
+        h.setFont(QFont(FONT_MAIN, 38, QFont.Weight.Black))
+        h.setStyleSheet("color:white;")
+        head.addWidget(h)
+        head.addStretch()
+
         self.edit_btn = QPushButton("Edit Profile")
-        self.edit_btn.setFixedSize(140, 45)
-        self.edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.edit_btn.setFixedHeight(52)
+        self.edit_btn.setFont(QFont(FONT_MAIN, 14, QFont.Weight.Bold))
         self.edit_btn.setStyleSheet("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                   stop:0 #667eea, stop:1 #764ba2);
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 #667eea, stop:1 #764ba2);
                 color: white;
-                border-radius: 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                   stop:0 #764ba2, stop:1 #667eea);
+                border-radius: 26px;
+                padding: 0 26px;
             }
         """)
         self.edit_btn.clicked.connect(self.toggle_edit)
-        header_row.addWidget(self.edit_btn)
-        
-        content_layout.addLayout(header_row)
+        head.addWidget(self.edit_btn)
 
-        # Main Layout Grid
+        lay.addLayout(head)
+
         grid = QGridLayout()
-        grid.setSpacing(30)
+        grid.setSpacing(48)
 
-        # --- LEFT: IDENTITY CARD ---
-        self.id_card = QFrame()
-        self.id_card.setFixedWidth(400)
-        self.id_card.setStyleSheet("""
+        # ---------- LEFT CARD ----------
+        left = QFrame()
+        left.setStyleSheet("""
             QFrame {
-                background: rgba(255, 255, 255, 0.07);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 24px;
+                background: rgba(255,255,255,0.07);
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: 28px;
             }
         """)
-        id_layout = QVBoxLayout(self.id_card)
-        id_layout.setContentsMargins(30, 40, 30, 40)
-        id_layout.setSpacing(20)
+        ll = QVBoxLayout(left)
+        ll.setContentsMargins(40, 44, 40, 44)
+        ll.setSpacing(26)
 
         self.avatar = QLabel("A")
-        self.avatar.setFixedSize(120, 120)
+        self.avatar.setFixedSize(130,130)
         self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.avatar.setFont(QFont("Segoe UI", 48, QFont.Weight.Bold))
+        self.avatar.setFont(QFont(FONT_MAIN, 52, QFont.Weight.Black))
         self.avatar.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #667eea, stop:1 #764ba2);
-            color: white;
-            border-radius: 60px;
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                stop:0 #667eea, stop:1 #764ba2);
+            color:white;
+            border-radius:65px;
         """)
-        id_layout.addWidget(self.avatar, alignment=Qt.AlignmentFlag.AlignCenter)
+        ll.addWidget(self.avatar, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Name Display/Input
+        # Name
         self.name_label = QLabel("Loading...")
-        self.name_label.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
-        self.name_label.setStyleSheet("color: white; background: transparent;")
+        self.name_label.setFont(QFont(FONT_MAIN, 34, QFont.Weight.Black))
+        self.name_label.setStyleSheet("color:#e0e0ff;")
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         self.name_input = QLineEdit()
-        self.name_input.setFont(QFont("Segoe UI", 16))
-        self.name_input.setStyleSheet("background: rgba(255,255,255,0.1); color: white; padding: 8px; border-radius: 8px;")
         self.name_input.setVisible(False)
-        
-        id_layout.addWidget(self.name_label)
-        id_layout.addWidget(self.name_input)
+        self.name_input.setFont(QFont(FONT_MAIN, 18, QFont.Weight.Bold))
+        self.name_input.setStyleSheet("""
+            background: rgba(255,255,255,0.14);
+            color:white;
+            border-radius:14px;
+            padding:12px;
+        """)
 
         # Email
-        self.email_label = QLabel("user@example.com")
-        self.email_label.setStyleSheet("color: #718096; background: transparent;")
+        self.email_label = QLabel("")
+        self.email_label.setFont(QFont(FONT_MAIN, 18, QFont.Weight.Bold))
         self.email_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        id_layout.addWidget(self.email_label)
+        self.email_label.setStyleSheet("color:#b6c0ff;")
+        self.email_input = QLineEdit()
+        self.email_input.setVisible(False)
+        self.email_input.setFont(QFont(FONT_MAIN, 16, QFont.Weight.Bold))
+        self.email_input.setStyleSheet("""
+            background: rgba(255,255,255,0.14);
+            color:white;
+            border-radius:14px;
+            padding:10px;
+        """)
 
-        id_layout.addSpacing(20)
-        
-        # Details List (DOB, Gender)
-        details_box = QFrame()
-        details_box.setStyleSheet("background: rgba(0,0,0,0.15); border-radius: 16px; border: none;")
-        details_layout = QGridLayout(details_box)
-        details_layout.setSpacing(20)
-        details_layout.setContentsMargins(20, 20, 20, 20)
+        ll.addWidget(self.name_label)
+        ll.addWidget(self.name_input)
+        ll.addWidget(self.email_label)
+        ll.addWidget(self.email_input)
 
-        label_style = "color: rgba(255, 255, 255, 0.5); font-size: 13px; font-weight: 500;"
-        value_style = "color: white; font-size: 14px; font-weight: bold;"
+        # Info rows
+        def info(title):
+            r = QHBoxLayout()
+            t = QLabel(title)
+            t.setFont(QFont(FONT_MAIN, 16, QFont.Weight.Bold))
+            t.setStyleSheet("color:#aab1ff;")
+            v = QLabel("--")
+            v.setFont(QFont(FONT_MAIN, 20, QFont.Weight.Black))
+            v.setStyleSheet("color:white;")
+            r.addWidget(t)
+            r.addStretch()
+            r.addWidget(v)
+            ll.addLayout(r)
+            return v
 
-        dob_title = QLabel("Date of Birth")
-        dob_title.setStyleSheet(label_style)
-        details_layout.addWidget(dob_title, 0, 0)
-        
-        self.dob_label = QLabel("2000-01-01")
-        self.dob_label.setStyleSheet(value_style)
-        self.dob_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        details_layout.addWidget(self.dob_label, 0, 1)
+        self.dob_label = info("DATE OF BIRTH")
+        self.gender_label = info("GENDER")
 
-        self.dob_input = QLineEdit()
-        self.dob_input.setStyleSheet("background: #2d3748; color: white; border-radius: 5px; padding: 4px;")
-        self.dob_input.setVisible(False)
-        details_layout.addWidget(self.dob_input, 0, 1)
+        grid.addWidget(left, 0, 0)
 
-        gender_title = QLabel("Gender")
-        gender_title.setStyleSheet(label_style)
-        details_layout.addWidget(gender_title, 1, 0)
-        
-        self.gender_label = QLabel("Male")
-        self.gender_label.setStyleSheet(value_style)
-        self.gender_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        details_layout.addWidget(self.gender_label, 1, 1)
-
-        self.gender_input = QComboBox()
-        self.gender_input.addItems(["Male", "Female", "Other"])
-        self.gender_input.setStyleSheet("background: #2d3748; color: white; border-radius: 5px; padding: 2px;")
-        self.gender_input.setVisible(False)
-        details_layout.addWidget(self.gender_input, 1, 1)
-
-        id_layout.addWidget(details_box)
-        grid.addWidget(self.id_card, 0, 0)
-
-        # --- RIGHT: STATS GRID ---
-        stats_pane = QFrame()
-        stats_pane.setStyleSheet("""
+        # ---------- RIGHT CARD ----------
+        right = QFrame()
+        right.setStyleSheet("""
             QFrame {
-                background: rgba(255, 255, 255, 0.04);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 24px;
+                background: rgba(255,255,255,0.06);
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: 28px;
             }
         """)
-        stats_main_layout = QVBoxLayout(stats_pane)
-        stats_main_layout.setContentsMargins(30, 30, 30, 30)
+        rl = QVBoxLayout(right)
+        rl.setContentsMargins(44, 44, 44, 44)
+        rl.setSpacing(28)
 
-        stats_head = QLabel("Fitness Profile")
-        stats_head.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
-        stats_head.setStyleSheet("color: #667eea; background: transparent;")
-        stats_main_layout.addWidget(stats_head)
-        stats_main_layout.addSpacing(20)
+        t = QLabel("Fitness Profile")
+        t.setFont(QFont(FONT_MAIN, 26, QFont.Weight.Black))
+        t.setStyleSheet("color:#8fa2ff;")
+        rl.addWidget(t)
 
-        stats_grid = QGridLayout()
-        stats_grid.setSpacing(20)
+        def stat(title):
+            r = QHBoxLayout()
+            l = QLabel(title)
+            l.setFont(QFont(FONT_MAIN, 16, QFont.Weight.Bold))
+            l.setStyleSheet("color:#aab1ff;")
+            v = QLabel("--")
+            v.setFont(QFont(FONT_MAIN, 24, QFont.Weight.Black))
+            v.setStyleSheet("color:white;")
+            r.addWidget(l)
+            r.addStretch()
+            r.addWidget(v)
+            rl.addLayout(r)
+            return v
 
-        self.h_box = self.create_stat_widget("Height", "175 cm")
-        self.w_box = self.create_stat_widget("Weight", "70 kg")
-        self.d_box = self.create_stat_widget("Workout Duration", "45 min")
-        self.f_box = self.create_stat_widget("Weekly Frequency", "4 days")
+        self.height_val = stat("HEIGHT")
+        self.weight_val = stat("WEIGHT")
+        self.duration_val = stat("WORKOUT DURATION")
+        self.freq_val = stat("WEEKLY FREQUENCY")
 
-        stats_grid.addWidget(self.h_box, 0, 0)
-        stats_grid.addWidget(self.w_box, 0, 1)
-        stats_grid.addWidget(self.d_box, 1, 0)
-        stats_grid.addWidget(self.f_box, 1, 1)
-
-        stats_main_layout.addLayout(stats_grid)
-        stats_main_layout.addSpacing(30)
-
-        # Current Plan Card
-        plan_card = QFrame()
-        plan_card.setStyleSheet("background: rgba(255,255,255,0.05); border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);")
-        plan_layout = QVBoxLayout(plan_card)
-        
-        self.plan_val = QLabel("Intermediate")
-        self.plan_val.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+        self.plan_val = QLabel("--")
         self.plan_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.plan_val.setStyleSheet("color: white; border: none;")
-        plan_layout.addWidget(self.plan_val)
+        self.plan_val.setFont(QFont(FONT_MAIN, 30, QFont.Weight.Black))
+        self.plan_val.setStyleSheet("color:white; margin-top:26px;")
+        rl.addWidget(self.plan_val)
 
-        p_lbl = QLabel("Current Plan")
-        p_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        p_lbl.setStyleSheet("color: #718096; border: none;")
-        plan_layout.addWidget(p_lbl)
+        grid.addWidget(right, 0, 1)
+        lay.addLayout(grid)
 
-        stats_main_layout.addWidget(plan_card)
+        scroll.setWidget(wrap)
+        main.addWidget(scroll)
 
-        grid.addWidget(stats_pane, 0, 1)
-        content_layout.addLayout(grid)
+    # ---------------- LOGIC ----------------
+    def refresh_display(self):
+        self.name_label.setText(self.profile.get("name", "User"))
+        self.avatar.setText(self.profile.get("name", "U")[0].upper())
+        self.email_label.setText(self.profile.get("email", "--"))
 
-        scroll.setWidget(content_wrapper)
-        main_layout.addWidget(scroll)
+        self.dob_label.setText(self.profile.get("dob", "--"))
+        self.gender_label.setText(self.profile.get("gender", "--"))
 
-    def create_stat_widget(self, title, value):
-        box = QFrame()
-        box.setStyleSheet("""
-            QFrame {
-                background: rgba(0, 0, 0, 0.25);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-                border-radius: 18px;
-                padding: 20px;
-            }
-        """)
-        layout = QVBoxLayout(box)
-        
-        val = QLabel(value)
-        val.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
-        val.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        val.setStyleSheet("color: white; border: none;")
-        layout.addWidget(val)
-        
-        lbl = QLabel(title)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: #718096; text-transform: uppercase; font-size: 10px; font-weight: bold; border: none;")
-        layout.addWidget(lbl)
-        
-        # Add input for editing
-        inp = QLineEdit()
-        inp.setStyleSheet("background: #2d3748; color: white; border-radius: 5px;")
-        inp.setVisible(False)
-        layout.addWidget(inp)
-        
-        box.value_label = val
-        box.input_field = inp
-        return box
+        self.height_val.setText(f"{self.profile.get('height', '--')} cm")
+        self.weight_val.setText(f"{self.profile.get('weight', '--')} kg")
+        self.duration_val.setText(f"{self.profile.get('workout_duration', '--')} min")
+        self.freq_val.setText(f"{self.profile.get('weekly_frequency', '--')} days")
+
+        self.plan_val.setText(self.profile.get("fitness_level") or "STANDARD PLAN")
+
+        self.name_label.setVisible(True)
+        self.name_input.setVisible(False)
+        self.email_label.setVisible(True)
+        self.email_input.setVisible(False)
 
     def toggle_edit(self):
-        if not self.edit_mode:
-            # Enter Edit Mode - Only for Personal Details
-            self.edit_mode = True
-            self.edit_btn.setText("Save Changes")
-            self.edit_btn.setStyleSheet(self.edit_btn.styleSheet().replace("#667eea", "#48bb78")) # Greenish for save
+        self.edit_mode = not self.edit_mode
+        self.name_label.setVisible(not self.edit_mode)
+        self.name_input.setVisible(self.edit_mode)
+        self.email_label.setVisible(not self.edit_mode)
+        self.email_input.setVisible(self.edit_mode)
 
-            # Toggle Visibility - Personal Details Only
-            self.name_label.setVisible(False)
-            self.name_input.setVisible(True)
+        if self.edit_mode:
             self.name_input.setText(self.profile.get("name", ""))
-
-            self.dob_label.setVisible(False)
-            self.dob_input.setVisible(True)
-            self.dob_input.setText(self.profile.get("dob", ""))
-            
-            self.gender_label.setVisible(False)
-            self.gender_input.setVisible(True)
-            self.gender_input.setCurrentText(self.profile.get("gender", "Male"))
-
-            # Fitness Profile fields remain read-only (no editing enabled)
+            self.email_input.setText(self.profile.get("email", ""))
+            self.edit_btn.setText("Save Changes")
         else:
             self.save_data()
 
     def save_data(self):
-        """Save changes to DB and exit edit mode - Personal Details Only"""
-        try:
-            # Only update personal details, not fitness profile
-            updates = {
-                "name": self.name_input.text().strip(),
-                "dob": self.dob_input.text().strip(),
-                "gender": self.gender_input.currentText()
-            }
-            
-            success, msg = update_trainee(self.trainee_id, **updates)
-            if success:
-                QMessageBox.information(self, "Success", "Profile updated successfully!")
-                self.edit_mode = False
-                self.edit_btn.setText("Edit Profile")
-                self.load_data() # Reload from DB
-            else:
-                QMessageBox.critical(self, "Error", f"Failed to update profile: {msg}")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"An error occurred: {str(e)}")
-
-    def refresh_display(self):
-        """Update UI elements with data from self.profile"""
-        self.name_label.setText(self.profile.get("name", "User"))
-        self.avatar.setText(self.profile.get("name", "U")[0].upper())
-        self.email_label.setText(self.profile.get("email", "No Email"))
-        self.dob_label.setText(self.profile.get("dob", "Not Set"))
-        self.gender_label.setText(self.profile.get("gender", "Not Set"))
-        
-        self.h_box.value_label.setText(f"{self.profile.get('height', 0)} cm")
-        self.w_box.value_label.setText(f"{self.profile.get('weight', 0)} kg")
-        self.d_box.value_label.setText(f"{self.profile.get('workout_duration', 0)} min")
-        self.f_box.value_label.setText(f"{self.profile.get('weekly_frequency', 0)} days")
-        
-        self.plan_val.setText(self.profile.get("fitness_level") or "Standard Plan")
-
-        # Ensure inputs are hidden and labels visible
-        self.name_label.setVisible(True); self.name_input.setVisible(False)
-        self.dob_label.setVisible(True); self.dob_input.setVisible(False)
-        self.gender_label.setVisible(True); self.gender_input.setVisible(False)
-        for b in [self.h_box, self.w_box, self.d_box, self.f_box]:
-            b.value_label.setVisible(True); b.input_field.setVisible(False)
+        success, msg = update_trainee(
+            self.trainee_id,
+            name=self.name_input.text().strip(),
+            email=self.email_input.text().strip()
+        )
+        if success:
+            QMessageBox.information(self, "Success", "Profile updated")
+            self.edit_btn.setText("Edit Profile")
+            self.load_data()
+        else:
+            QMessageBox.warning(self, "Error", msg)
 
     def on_analytics_clicked(self):
-        """Notify main window to show analytics"""
-        main_win = self.window()
-        if hasattr(main_win, "show_analytics"):
-            main_win.show_analytics()
+        main = self.window()
+        if hasattr(main, "show_analytics"):
+            main.show_analytics()

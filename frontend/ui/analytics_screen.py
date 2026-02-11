@@ -11,6 +11,10 @@ from matplotlib.ticker import MaxNLocator
 from backend.models.data_manager import session_analytics, get_trainee_info
 from backend.models.data_manager import get_workout_plan
 
+from backend.utils.activity_tracker import is_inactive_30_days, update_last_activity
+from backend.models.data_manager import reset_sessions_after_promotion
+
+
 
 class AnalyticsScreen(QWidget):
     """Analytics screen showing workout completion summary and charts"""
@@ -21,6 +25,7 @@ class AnalyticsScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.trainee_id = None
+        self.reset_popup_shown = False
         self.rep_totals = {}  
         self.init_ui()
         
@@ -236,7 +241,7 @@ class AnalyticsScreen(QWidget):
         
         title = QLabel("Workout Sessions Tracker")
         title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        title.setStyleSheet("color: #667eea;")
+        title.setStyleSheet("color: white;")
         tracker_layout.addWidget(title)
         
         grid_frame = QFrame()
@@ -302,7 +307,7 @@ class AnalyticsScreen(QWidget):
 
         title = QLabel("Workout Progress Trends")
         title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        title.setStyleSheet("color: #667eea;")
+        title.setStyleSheet("color: white;")
         charts_layout.addWidget(title)
 
         self.line_charts_layout = QGridLayout()
@@ -329,7 +334,7 @@ class AnalyticsScreen(QWidget):
 
         title = QLabel("Exercise Accuracy Overview")
         title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        title.setStyleSheet("color: #667eea;")
+        title.setStyleSheet("color: white;")
         accuracy_layout_main.addWidget(title)
 
         # LAYOUT ONLY FOR BAR CHART
@@ -346,7 +351,7 @@ class AnalyticsScreen(QWidget):
 
         rep_section = QLabel("Rep-Based Workouts")
         rep_section.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        rep_section.setStyleSheet("color: #667eea; border: none;")
+        rep_section.setStyleSheet("color: white; border: none;")
         rep_sec_layout.addWidget(rep_section)
         rep_sec_layout.addSpacing(15)
         
@@ -366,7 +371,7 @@ class AnalyticsScreen(QWidget):
 
         time_section = QLabel("Time-Based Workouts")
         time_section.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        time_section.setStyleSheet("color: #667eea; border: none;")
+        time_section.setStyleSheet("color: white; border: none;")
         time_sec_layout.addWidget(time_section)
         time_sec_layout.addSpacing(15)
         
@@ -417,7 +422,7 @@ class AnalyticsScreen(QWidget):
 
         lbl_widget = QLabel(label.upper())
         lbl_widget.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        lbl_widget.setStyleSheet("color: #667eea; letter-spacing: 1px; border: none;")
+        lbl_widget.setStyleSheet("color: #fbbf24; letter-spacing: 1px; border: none;")
         lbl_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_widget)
         
@@ -435,6 +440,7 @@ class AnalyticsScreen(QWidget):
                 gridline-color: rgba(255, 255, 255, 0.05);
                 color: #e2e8f0;
                 font-size: 14px;
+                font-weight: bold;
                 outline: none;
             }
             QTableWidget::item {
@@ -443,7 +449,7 @@ class AnalyticsScreen(QWidget):
             }
             QHeaderView::section {
                 background: rgba(102, 126, 234, 0.1);
-                color: #667eea;
+                color: #fbbf24;
                 padding: 12px;
                 border: none;
                 font-weight: bold;
@@ -602,6 +608,32 @@ class AnalyticsScreen(QWidget):
             return
             
         session_analytics.load_sessions(self.trainee_id)
+        
+                # ===== 30 DAYS INACTIVITY RESET =====
+        if is_inactive_30_days(self.trainee_id):
+            
+            from backend.models.data_manager import reset_sessions_after_promotion
+
+            reset_sessions_after_promotion(self.trainee_id)
+
+            session_analytics.sessions.clear()
+            session_analytics.total_sessions = 0
+            self.rep_totals = {}
+
+            self.update_session_tracker(0)
+
+            self.total_score_card.findChild(QLabel, "value").setText(f"0/{self.plan_max_points}")
+            self.remaining_score_card.findChild(QLabel, "value").setText(str(self.plan_max_points))
+
+            if not self.reset_popup_shown:
+                self.show_popup_message(
+                    "Restarted",
+                    "⚠ Inactive for 30 days – progress restarted!",
+                    icon=QMessageBox.Icon.Warning
+                )
+                self.reset_popup_shown = True
+
+            return
         
         # Update summary cards
         

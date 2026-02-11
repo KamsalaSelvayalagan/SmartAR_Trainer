@@ -94,13 +94,14 @@ class FitnessForm(QWidget):
                 color: #667eea;
                 background: transparent;
                 padding: 10px;
+                font-size: 32px;
             }
         """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         subtitle = QLabel("Elevate your lifestyle with personalized AI coaching")
-        subtitle.setFont(QFont("Segoe UI", 13))
-        subtitle.setStyleSheet("color: #718096; background: transparent;")
+        subtitle.setFont(QFont("Segoe UI", 16))
+        subtitle.setStyleSheet("color: #5c646e; background: transparent; font-size: 14px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         card_layout.addWidget(title)
