@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame,
     QRadioButton, QButtonGroup,
-    QDoubleSpinBox, QMessageBox, QComboBox, QSpinBox
+    QDoubleSpinBox, QMessageBox, QComboBox, QSpinBox,
+    QAbstractSpinBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -94,13 +95,14 @@ class FitnessForm(QWidget):
                 color: #667eea;
                 background: transparent;
                 padding: 10px;
+                font-size: 32px;
             }
         """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         subtitle = QLabel("Elevate your lifestyle with personalized AI coaching")
-        subtitle.setFont(QFont("Segoe UI", 13))
-        subtitle.setStyleSheet("color: #718096; background: transparent;")
+        subtitle.setFont(QFont("Segoe UI", 16))
+        subtitle.setStyleSheet("color: #5c646e; background: transparent; font-size: 14px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         card_layout.addWidget(title)
@@ -203,6 +205,74 @@ class FitnessForm(QWidget):
             row.addWidget(widget)
             return container
 
+        def create_spinner_row(text, widget):
+            container = QWidget()
+            container.setFixedWidth(500)
+            container.setStyleSheet("""
+                background:#ffffff;
+                border: 1px solid #edf2f7;
+                border-radius:12px;
+            """)
+            row = QHBoxLayout(container)
+            row.setContentsMargins(16, 12, 16, 12)
+
+            lbl = QLabel(text)
+            lbl.setStyleSheet(label_style)
+
+            # Hide default buttons
+            widget.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            widget.setFixedHeight(40)
+            widget.setFixedWidth(100)
+            widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            widget.setStyleSheet(input_style)
+
+            # Custom buttons
+            btn_style = """
+                QPushButton {
+                    background-color: #f7fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    color: #4a5568;
+                    font-size: 18px;
+                    width: 35px;
+                    height: 35px;
+                }
+                QPushButton:hover {
+                    background-color: #edf2f7;
+                    border-color: #667eea;
+                    color: #667eea;
+                }
+                QPushButton:pressed {
+                    background-color: #cbd5e0;
+                }
+            """
+
+            btn_down = QPushButton("🡃")
+            btn_up = QPushButton("🡁")
+            btn_down.setStyleSheet(btn_style)
+            btn_up.setStyleSheet(btn_style)
+
+            def dec():
+                widget.setValue(widget.value() - widget.singleStep())
+
+            def inc():
+                widget.setValue(widget.value() + widget.singleStep())
+
+            btn_down.clicked.connect(dec)
+            btn_up.clicked.connect(inc)
+
+            # Button container for side-by-side layout
+            btn_layout = QHBoxLayout()
+            btn_layout.setSpacing(5)
+            btn_layout.addWidget(btn_down)
+            btn_layout.addWidget(btn_up)
+
+            row.addWidget(lbl)
+            row.addStretch()
+            row.addWidget(widget)
+            row.addLayout(btn_layout)
+            return container
+        
         # ================= DOB (force user selection) =================
         self.day_input = QComboBox()
         self.month_input = QComboBox()
@@ -263,9 +333,8 @@ class FitnessForm(QWidget):
 
         self.male_radio = QRadioButton("Male")
         self.female_radio = QRadioButton("Female")
-        self.other_radio = QRadioButton("Other")
 
-        for rb in (self.male_radio, self.female_radio, self.other_radio):
+        for rb in (self.male_radio, self.female_radio):
             rb.setStyleSheet(radio_style)
             self.gender_group.addButton(rb)
 
@@ -276,7 +345,6 @@ class FitnessForm(QWidget):
         gender_layout.addWidget(gender_label)
         gender_layout.addWidget(self.male_radio)
         gender_layout.addWidget(self.female_radio)
-        gender_layout.addWidget(self.other_radio)
         card_layout.addWidget(gender_box)
 
         # ================= Height & Weight (require user interaction) =================
@@ -285,14 +353,14 @@ class FitnessForm(QWidget):
         self.height_input.setSuffix(" cm")
         self.height_input.setValue(100)  # placeholder-like default
         self.height_input.valueChanged.connect(lambda _: setattr(self, "_height_touched", True))
-        card_layout.addWidget(create_row("Height", self.height_input))
+        card_layout.addWidget(create_spinner_row("Height", self.height_input))
 
         self.weight_input = QDoubleSpinBox()
         self.weight_input.setRange(30, 200)
         self.weight_input.setSuffix(" kg")
         self.weight_input.setValue(30)  # placeholder-like default
         self.weight_input.valueChanged.connect(lambda _: setattr(self, "_weight_touched", True))
-        card_layout.addWidget(create_row("Weight", self.weight_input))
+        card_layout.addWidget(create_spinner_row("Weight", self.weight_input))
 
         # ================= Workout Experience (no default selection) =================
         exp_label = QLabel("Do you have previous workout experience?")
@@ -334,8 +402,8 @@ class FitnessForm(QWidget):
         self.freq_input.setValue(0)        # ✅ default 0
         self.freq_input.valueChanged.connect(lambda _: setattr(self, "_frequency_touched", True))
 
-        exp_details_layout.addWidget(create_row("Workout duration per day?", self.duration_input))
-        exp_details_layout.addWidget(create_row("Workout days per week?", self.freq_input))
+        exp_details_layout.addWidget(create_spinner_row("Workout duration per day?", self.duration_input))
+        exp_details_layout.addWidget(create_spinner_row("Workout days per week?", self.freq_input))
 
         self.exp_details_widget.setVisible(False)
 
@@ -509,7 +577,6 @@ class FitnessForm(QWidget):
             "dob_year": self.year_input.currentIndex(),
             "gender_male": self.male_radio.isChecked(),
             "gender_female": self.female_radio.isChecked(),
-            "gender_other": self.other_radio.isChecked(),
             "height": self.height_input.value(),
             "weight": self.weight_input.value(),
             "workout_exp_yes": self.workout_yes_radio.isChecked(),
@@ -537,13 +604,10 @@ class FitnessForm(QWidget):
             self.male_radio.setChecked(True)
         elif data.get("gender_female"):
             self.female_radio.setChecked(True)
-        elif data.get("gender_other"):
-            self.other_radio.setChecked(True)
         else:
             self.gender_group.setExclusive(False)
             self.male_radio.setChecked(False)
             self.female_radio.setChecked(False)
-            self.other_radio.setChecked(False)
             self.gender_group.setExclusive(True)
 
         self.height_input.setValue(float(data.get("height", 100)))

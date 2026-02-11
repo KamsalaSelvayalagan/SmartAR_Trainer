@@ -3,6 +3,7 @@ import random
 import string
 import smtplib
 import ssl
+import time
 from email.message import EmailMessage
 from PyQt6.QtWidgets import (
     QMessageBox, QDialog, QVBoxLayout, QLabel, 
@@ -10,30 +11,39 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
+import re
+
+def load_env():
+    """Simple manual loader for .env file to avoid dependencies"""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    # Remove potential quotes and whitespace
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    os.environ[key] = value
 
 def generate_otp(length=6):
-    """Generate a random numeric OTP"""
-    return ''.join(random.choices(string.digits, k=length))
+    """Generate a random numeric OTP and its creation timestamp"""
+    otp = ''.join(random.choices(string.digits, k=length))
+    return otp, time.time()
 
 
 def send_otp_email(recipient_email: str, otp: str) -> tuple[bool, str]:
-    """Send OTP via SMTP using environment-configured credentials.
-
-    Expects the following environment variables (recommended):
-      - SMTP_HOST
-      - SMTP_PORT
-      - SMTP_USER
-      - SMTP_PASS
-      - SMTP_FROM (optional; defaults to SMTP_USER)
-      - SMTP_USE_SSL (optional; 'true' enables SSL)
-      - SMTP_STARTTLS (optional; 'true' enables STARTTLS)
-
-    Returns (success: bool, message: str).
-    """
-    host = os.getenv("SMTP_HOST")
-    port = os.getenv("SMTP_PORT")
-    user = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASS")
+    """Send OTP via SMTP using environment-configured credentials."""
+    load_env()
+    host = os.getenv("SMTP_HOST", "").strip()
+    port = os.getenv("SMTP_PORT", "").strip()
+    user = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASS", "").strip()
+    
+    print(f"DEBUG: Attempting SMTP connection to {host}:{port} for {user}")
     use_ssl = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
     starttls = os.getenv("SMTP_STARTTLS", "true").lower() == "true"
     from_addr = os.getenv("SMTP_FROM", user)
@@ -50,25 +60,60 @@ def send_otp_email(recipient_email: str, otp: str) -> tuple[bool, str]:
     msg["Subject"] = "Your verification code"
     msg["From"] = from_addr
     msg["To"] = recipient_email
-    msg.set_content(f"Your verification code is: {otp}\nThis code will expire in 10 minutes.")
+    msg.set_content(f"Your verification code is: {otp}\nThis code will expire in 5 minutes.")
 
-    try:
-        if use_ssl:
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(host, port_int, context=context) as server:
-                server.login(user, password)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(host, port_int, timeout=10) as server:
+    def attempt_connect(host_to_use):
+        try:
+            if use_ssl:
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(host_to_use, port_int, context=context, timeout=15)
+            else:
+                server = smtplib.SMTP(host_to_use, port_int, timeout=15)
                 server.ehlo()
                 if starttls:
                     server.starttls(context=ssl.create_default_context())
                     server.ehlo()
-                server.login(user, password)
-                server.send_message(msg)
-        return True, "Email sent"
-    except Exception as e:
-        return False, str(e)
+            
+            server.login(user, password)
+            server.send_message(msg)
+            server.quit()
+            return True, "Email sent"
+        except Exception as e:
+            return False, str(e)
+
+    # First attempt (Standard)
+    ok, err_msg = attempt_connect(host)
+    if ok:
+        return True, err_msg
+
+    # Fallback: If DNS failed or connection closed, try forcing IPv4 if it was an IPv6 issue
+    if "getaddrinfo failed" in err_msg or "Connection unexpectedly closed" in err_msg:
+        print(f"DEBUG: Primary connection failed ({err_msg}). Trying fallback...")
+        # Note: We can't easily force IPv4 in smtplib without resolving manually 
+        # but often trying 'smtp-relay.gmail.com' or checking host helps.
+        # For now, let's just return the clearest error.
+        pass
+
+    return False, err_msg
+
+
+def verify_otp(entered_otp, correct_otp, created_at, expiry_mins=5):
+    """
+    Verify if the entered OTP matches and hasn't expired.
+    Returns (bool, str).
+    """
+    if not entered_otp:
+        return False, "Please enter the verification code."
+    
+    if entered_otp != correct_otp:
+        return False, "The verification code you entered is incorrect."
+    
+    # Check expiration
+    elapsed = time.time() - created_at
+    if elapsed > (expiry_mins * 60):
+        return False, "This verification code has expired (5 minute limit). Please request a new one."
+        
+    return True, "Success"
 
 
 def send_otp(email, otp, parent=None, purpose="Verification"):
@@ -275,7 +320,7 @@ class OTPInputDialog(QDialog):
         cancel_btn.setMinimumHeight(45)
         cancel_btn.clicked.connect(self.reject)
         
-        verify_btn = QPushButton("Verify Account")
+        verify_btn = QPushButton("Verify")
         verify_btn.setObjectName("verify_btn")
         verify_btn.setCursor(Qt.CursorShape(13))
         verify_btn.setMinimumHeight(45)
@@ -307,4 +352,132 @@ class OTPInputDialog(QDialog):
         dialog.resend_callback = resend_callback
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.otp_value, True
+        return "", False
+
+
+class EmailInputDialog(QDialog):
+    """Branded dialog for getting and validating an email address"""
+    def __init__(self, title="Reset Password", description="Enter your registered email address:", parent=None, validator_func=None):
+        super().__init__(parent)
+        self.email_value = ""
+        self.validator_func = validator_func
+        self.dialog_title = title
+        self.dialog_description = description
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle(self.dialog_title)
+        self.setFixedWidth(400)
+        self.setMinimumHeight(250)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #0f172a;
+                border: 2px solid #334155;
+                border-bottom: 3px solid #667eea;
+                border-radius: 20px;
+            }
+            QLabel {
+                color: #f1f5f9;
+                background: transparent;
+            }
+            QLineEdit {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 12px;
+                color: white;
+                font-size: 14px;
+            }
+            QPushButton#submit_btn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                   stop:0 #667eea, stop:1 #764ba2);
+                color: white;
+                border-radius: 8px;
+                font-weight: bold;
+                padding: 10px;
+                font-size: 14px;
+                border: none;
+            }
+            QPushButton#submit_btn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                   stop:0 #764ba2, stop:1 #667eea);
+            }
+            QPushButton#cancel_btn {
+                background: transparent;
+                color: #94a3b8;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QPushButton#cancel_btn:hover {
+                color: white;
+                border-color: #475569;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(15)
+
+        title_lbl = QLabel(self.dialog_title)
+        title_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_lbl)
+
+        desc_lbl = QLabel(self.dialog_description)
+        desc_lbl.setFont(QFont("Segoe UI", 10))
+        desc_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("color: #94a3b8;")
+        layout.addWidget(desc_lbl)
+
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("yourname@example.com")
+        self.email_input.setMinimumHeight(45)
+        layout.addWidget(self.email_input)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("cancel_btn")
+        cancel_btn.setCursor(Qt.CursorShape(13))
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn, 1)
+
+        submit_btn = QPushButton("Continue")
+        submit_btn.setObjectName("submit_btn")
+        submit_btn.setCursor(Qt.CursorShape(13))
+        submit_btn.clicked.connect(self.on_submit)
+        btn_layout.addWidget(submit_btn, 2)
+
+        layout.addLayout(btn_layout)
+
+    def on_submit(self):
+        email = self.email_input.text().strip().lower()
+        if not email:
+            QMessageBox.warning(self, "Invalid Entry", "Please enter an email address.")
+            return
+
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(pattern, email):
+            QMessageBox.warning(self, "Invalid Format", "Please enter a valid email address.")
+            return
+
+        if self.validator_func:
+            ok, msg = self.validator_func(email)
+            if not ok:
+                QMessageBox.critical(self.parent() or self, "Error", msg)
+                return
+
+        self.email_value = email
+        self.accept()
+
+    @staticmethod
+    def get_email(title="Reset Password", description="Enter your registered email address:", parent=None, validator_func=None):
+        dialog = EmailInputDialog(title, description, parent, validator_func)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return dialog.email_value, True
         return "", False

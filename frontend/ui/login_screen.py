@@ -5,12 +5,13 @@ Diagonal split design with static branding
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFrame, QStackedWidget,
-                             QCheckBox, QMessageBox, QGraphicsColorizeEffect)
+                             QCheckBox, QMessageBox, QGraphicsColorizeEffect,
+                             QInputDialog)
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QTimer
 from PyQt6.QtGui import QFont, QColor, QPalette, QPainter, QPainterPath, QLinearGradient
 
 import re
-from backend.utils.email_service import generate_otp, send_otp_simulated, OTPInputDialog
+from backend.utils.email_service import generate_otp, send_otp, OTPInputDialog
 from backend.models.data_manager import (
     check_email_exists, 
     update_password, 
@@ -99,31 +100,34 @@ class ForgotPasswordDialog(QMessageBox):
         """)
 
     def start_flow(self):
-        # Step 1: Get Email
-        from PyQt6.QtWidgets import QInputDialog, QLineEdit
-        email, ok = QInputDialog.getText(
-            self.parent(), "Reset Password", 
-            "Enter your registered email:", 
-            QLineEdit.EchoMode.Normal
+        # Step 1: Get Email with custom dialog and validation
+        from backend.utils.email_service import EmailInputDialog
+        
+        def validator(email):
+            if not check_email_exists(email):
+                return False, "This email is not registered."
+            return True, ""
+
+        email, ok = EmailInputDialog.get_email(
+            title="Reset Password",
+            description="Enter the email address associated with your account to receive a verification code.",
+            parent=self.parent(),
+            validator_func=validator
         )
         
         if not ok or not email:
             return
             
-        if not check_email_exists(email):
-            QMessageBox.critical(self.parent(), "Error", "This email is not registered.")
-            return
-            
         self.email = email
-        self.otp = generate_otp()
+        self.otp, self.created_at = generate_otp()
         
-        # Step 2: Send OTP (Simulated)
-        send_otp_simulated(email, self.otp, self.parent(), "Password Reset Request")
+        # Step 2: Send OTP (SMTP with Fallback)
+        send_otp(email, self.otp, self.parent(), "Password Reset Request")
         
         # Define resend callback
         def resend():
-            self.otp = generate_otp()
-            send_otp_simulated(email, self.otp, self.parent(), "Password Reset")
+            self.otp, self.created_at = generate_otp()
+            send_otp(email, self.otp, self.parent(), "Password Reset")
 
         # Step 3: Verify OTP (Using new custom dialog)
         otp_input, ok = OTPInputDialog.get_otp(
@@ -137,8 +141,11 @@ class ForgotPasswordDialog(QMessageBox):
         if not ok or not otp_input:
             return
             
-        if otp_input != self.otp:
-            QMessageBox.critical(self.parent(), "Error", "Invalid OTP.")
+        from backend.utils.email_service import verify_otp
+        verified, v_msg = verify_otp(otp_input, self.otp, self.created_at, expiry_mins=5)
+        
+        if not verified:
+            QMessageBox.critical(self.parent(), "Error", v_msg)
             return
             
         while True:

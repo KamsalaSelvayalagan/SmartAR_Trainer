@@ -169,30 +169,6 @@ def get_workout_plan(plan_id):
             return []
 
         return [
-            {"name": "Jumping Jacks", "target": row["jumpingjack_count"]},
-            {"name": "Push Ups", "target": row["pushup_count"]},
-            {"name": "Plank", "target": row["plank_time"]},
-            {"name": "Crunches", "target": row["crunches_count"]},
-            {"name": "Squats", "target": row["squat_count"]},
-            {"name": "Cobra Stretch", "target": row["cobra_stretch_time"]}
-        ]
-    finally:
-        close_connection(connection, cursor)
-
-
-def get_workout_plan(plan_id):
-    connection = get_db_connection()
-    if not connection:
-        return []
-
-    try:
-        cursor = connection.cursor()
-        cursor.execute("SELECT * FROM workout_plan WHERE plan_id = ?", (plan_id,))
-        row = cursor.fetchone()
-        if not row:
-            return []
-
-        return [
             {"workout_id": 1, "name": "Jumping Jacks", "target": row["jumpingjack_count"]},
             {"workout_id": 2, "name": "Push Ups", "target": row["pushup_count"]},
             {"workout_id": 3, "name": "Plank", "target": row["plank_time"]},

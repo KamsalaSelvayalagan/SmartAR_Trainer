@@ -16,7 +16,7 @@ from frontend.ui.profile_screen import ProfileScreen
 from frontend.ui.analytics_screen import AnalyticsScreen
 
 from backend.models.data_manager import get_trainee_info, register_user
-from backend.utils.email_service import generate_otp, send_otp_simulated, OTPInputDialog
+from backend.utils.email_service import generate_otp, send_otp, OTPInputDialog
 
 
 class MainWindow(QMainWindow):
@@ -205,29 +205,34 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.login_screen)
 
     def on_fitness_completed(self, fitness_data: dict):
-        # Before creating the account, verify the email via OTP
         email = self.signup_data.get("email")
-        otp = generate_otp()
+        otp, created_at = generate_otp()
 
-        # Send OTP using in-app simulated dialog
-        send_otp_simulated(email, otp, parent=self, purpose="Email Verification")
+        # Send OTP (SMTP with Fallback)
+        send_otp(email, otp, parent=self, purpose="Email Verification")
 
         # Resend callback for dialog
         def _resend():
-            nonlocal otp
-            otp = generate_otp()
-            send_otp_simulated(email, otp, parent=self, purpose="Email Verification")
+            nonlocal otp, created_at
+            otp, created_at = generate_otp()
+            send_otp(email, otp, parent=self, purpose="Email Verification")
 
         otp_input, ok = OTPInputDialog.get_otp(
             email,
             title="Verify Email",
-            description=f"Enter the 6-digit code sent to {email}",
+            description=f"Enter the 6-digit code sent to {email}. (Valid for 5 minutes)",
             parent=self,
             resend_callback=_resend
         )
 
-        if not ok or otp_input != otp:
-            QMessageBox.critical(self, "Verification Failed", "Invalid OTP or verification cancelled.")
+        if not ok:
+            return
+
+        from backend.utils.email_service import verify_otp
+        verified, v_msg = verify_otp(otp_input, otp, created_at, expiry_mins=5)
+        
+        if not verified:
+            QMessageBox.critical(self, "Verification Failed", v_msg)
             return
 
         # Create account with fitness info

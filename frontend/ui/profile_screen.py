@@ -186,7 +186,7 @@ class ProfileScreen(QWidget):
 
         # Email
         self.email_label = QLabel("user@example.com")
-        self.email_label.setStyleSheet("color: #718096; background: transparent;")
+        self.email_label.setStyleSheet("color: white; background: transparent; font-size: 15px; font-weight: bold;")
         self.email_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         id_layout.addWidget(self.email_label)
 
@@ -199,8 +199,8 @@ class ProfileScreen(QWidget):
         details_layout.setSpacing(20)
         details_layout.setContentsMargins(20, 20, 20, 20)
 
-        label_style = "color: rgba(255, 255, 255, 0.5); font-size: 13px; font-weight: 500;"
-        value_style = "color: white; font-size: 14px; font-weight: bold;"
+        label_style = "color: rgba(255, 255, 255, 0.85); font-size: 15px; font-weight: 500;"
+        value_style = "color: white; font-size: 16px; font-weight: bold;"
 
         dob_title = QLabel("Date of Birth")
         dob_title.setStyleSheet(label_style)
@@ -281,7 +281,7 @@ class ProfileScreen(QWidget):
 
         p_lbl = QLabel("Current Plan")
         p_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        p_lbl.setStyleSheet("color: #718096; border: none;")
+        p_lbl.setStyleSheet("color: #cbd5e0; border: none; font-size: 16px;")
         plan_layout.addWidget(p_lbl)
 
         stats_main_layout.addWidget(plan_card)
@@ -312,12 +312,13 @@ class ProfileScreen(QWidget):
         
         lbl = QLabel(title)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("color: #718096; text-transform: uppercase; font-size: 10px; font-weight: bold; border: none;")
+        lbl.setStyleSheet("color: #cbd5e0; text-transform: uppercase; font-size: 13px; font-weight: bold; border: none;")
         layout.addWidget(lbl)
         
         # Add input for editing
         inp = QLineEdit()
-        inp.setStyleSheet("background: #2d3748; color: white; border-radius: 5px;")
+        inp.setStyleSheet("background: #2d3748; color: white; border-radius: 8px; padding: 5px;")
+        inp.setAlignment(Qt.AlignmentFlag.AlignCenter)
         inp.setVisible(False)
         layout.addWidget(inp)
         
@@ -330,7 +331,7 @@ class ProfileScreen(QWidget):
             # Enter Edit Mode - Only for Personal Details
             self.edit_mode = True
             self.edit_btn.setText("Save Changes")
-            self.edit_btn.setStyleSheet(self.edit_btn.styleSheet().replace("#667eea", "#48bb78")) # Greenish for save
+            
 
             # Toggle Visibility - Personal Details Only
             self.name_label.setVisible(False)
@@ -345,7 +346,15 @@ class ProfileScreen(QWidget):
             self.gender_input.setVisible(True)
             self.gender_input.setCurrentText(self.profile.get("gender", "Male"))
 
-            # Fitness Profile fields remain read-only (no editing enabled)
+            # Toggle Visibility - Fitness Stats
+            for box in [self.h_box, self.w_box, self.d_box, self.f_box]:
+                box.value_label.setVisible(False)
+                box.input_field.setVisible(True)
+            
+            self.h_box.input_field.setText(str(self.profile.get("height", "")))
+            self.w_box.input_field.setText(str(self.profile.get("weight", "")))
+            self.d_box.input_field.setText(str(self.profile.get("workout_duration", "")))
+            self.f_box.input_field.setText(str(self.profile.get("weekly_frequency", "")))
         else:
             self.save_data()
 
@@ -356,7 +365,11 @@ class ProfileScreen(QWidget):
             updates = {
                 "name": self.name_input.text().strip(),
                 "dob": self.dob_input.text().strip(),
-                "gender": self.gender_input.currentText()
+                "gender": self.gender_input.currentText(),
+                "height": self.h_box.input_field.text().strip(),
+                "weight": self.w_box.input_field.text().strip(),
+                "workout_duration": self.d_box.input_field.text().strip(),
+                "weekly_frequency": self.f_box.input_field.text().strip()
             }
             
             success, msg = update_trainee(self.trainee_id, **updates)
